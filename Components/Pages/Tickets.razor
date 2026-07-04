@@ -1,0 +1,552 @@
+@page "/tickets"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IHttpClientFactory Http
+@inject IJSRuntime JSRuntime
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@using TicketingSystem.UI.Models
+@using TicketingSystem.UI.Services
+
+<AppShell>
+    <TopBarContent>
+        <input type="text"
+               class="filter-input"
+               placeholder="🔍 Search tickets..."
+               value="@search"
+               @oninput="e => search = e.Value?.ToString() ?? string.Empty" />
+
+        <select class="filter-select" @bind="status">
+            <option value="">All Status</option>
+            <option value="Open">Open</option>
+            <option value="InProgress">In Progress</option>
+            <option value="Closed">Closed</option>
+        </select>
+
+        <select class="filter-select" @bind="priority">
+            <option value="">All Priority</option>
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+        </select>
+
+        <button class="btn-filter" @onclick="ApplyFilters">Search</button>
+        <button class="btn-filter-clear" @onclick="ClearFilters">Clear</button>
+    </TopBarContent>
+
+    <ChildContent>
+        <div class="content-header">
+            <div>
+                <h1 class="content-title">Tickets</h1>
+                <p class="content-subtitle">@totalItems ticket@(totalItems == 1 ? "" : "s") found</p>
+            </div>
+            @if (AuthService.HasPermission("CanCreateTicket"))
+            {
+                <button class="btn-create" @onclick="OpenCreateModal">
+                    ➕ Create New Ticket
+                </button>
+            }
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="loading-state">
+                <div class="spinner-border text-primary"></div>
+                <p>Loading tickets...</p>
+            </div>
+        }
+        else if (tickets.Count == 0)
+        {
+            <div class="empty-state">
+                <div class="empty-icon">📭</div>
+                <h5>No tickets found</h5>
+                <p>Try adjusting your filters or create a new ticket</p>
+            </div>
+        }
+        else
+        {
+            <div class="tickets-table">
+                <div class="table-header">
+                    <div class="col-id">ID</div>
+                    <div class="col-title">Title</div>
+                    <div class="col-status">Status</div>
+                    <div class="col-priority">Priority</div>
+                    <div class="col-desc">Description</div>
+                    <div class="col-created">Created</div>
+                    <div class="col-closed">Closed</div>
+                    <div class="col-days">Days</div>
+                    <div class="col-actions">Actions</div>
+                </div>
+
+                @foreach (var t in tickets)
+                {
+                    <div class="table-row" @ondblclick="() => ViewTicket(t.Id)" title="Double-click to open">
+                        <div class="col-id">#@t.Id</div>
+                        <div class="col-title"><strong>@t.Title</strong></div>
+                        <div class="col-status">
+                            <span class="status-badge status-@t.Status.ToLower()">
+                                @FormatStatus(t.Status)
+                            </span>
+                        </div>
+                        <div class="col-priority">
+                            <span class="priority-badge priority-@t.Priority.ToLower()">
+                                @t.Priority
+                            </span>
+                        </div>
+                        <div class="col-desc">
+                            <small>@(t.Description?.Length > 60 ? t.Description[..60] + "…" : t.Description)</small>
+                        </div>
+                        <div class="col-created">
+                            <small>@t.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy")</small>
+                        </div>
+                        <div class="col-closed">
+                            @if (t.Status == "Closed" && t.UpdatedAt != null)
+                            {
+                                <small>@t.UpdatedAt.Value.ToLocalTime().ToString("MMM dd, yyyy")</small>
+                            }
+                            else { <small class="text-muted">—</small> }
+                        </div>
+                        <div class="col-days">
+                            @if (t.Status == "Closed" && t.UpdatedAt != null)
+                            {
+                                <span class="days-badge">@GetDaysBetween(t.CreatedAt, t.UpdatedAt.Value)d</span>
+                            }
+                            else { <small class="text-muted">—</small> }
+                        </div>
+                        <div class="col-actions" @onclick:stopPropagation="true">
+                            <button class="btn-action btn-show" @onclick="() => ViewTicket(t.Id)" title="View">👁️</button>
+                            @if (AuthService.HasPermission("CanEditTicket"))
+                            {
+                                <button class="btn-action btn-edit" @onclick="() => OpenEditModal(t)" title="Edit">✏️</button>
+                            }
+                            @if (AuthService.HasPermission("CanDeleteTicket"))
+                            {
+                                <button class="btn-action btn-delete" @onclick="() => DeleteTicket(t.Id)" title="Delete">🗑️</button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="pagination-bar">
+                <button class="page-btn" @onclick="PreviousPage" disabled="@IsFirstPage">← Prev</button>
+                <span class="page-info">Page @pageNumber of @TotalPages</span>
+                <button class="page-btn" @onclick="NextPage" disabled="@IsLastPage">Next →</button>
+            </div>
+        }
+    </ChildContent>
+</AppShell>
+
+@if (showModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal-box" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h5>@(isEditing ? "✏️ Edit Ticket" : "➕ Create New Ticket")</h5>
+                <button class="modal-close" @onclick="CloseModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Title <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" placeholder="Enter ticket title"
+                           value="@newTicket.Title"
+                           @oninput="e => newTicket.Title = e.Value?.ToString() ?? string.Empty" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description <span class="text-danger">*</span></label>
+                    <textarea class="form-control" rows="4" placeholder="Describe the issue"
+                              @bind="newTicket.Description"></textarea>
+                </div>
+                @if (!isEditing)
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Category <span class="text-danger">*</span></label>
+                        <select class="form-select" @bind="selectedCategoryId">
+                            <option value="0">-- Select category --</option>
+                            @foreach (var c in categories)
+                            {
+                                <option value="@c.Id">@c.Name (→ @c.AssignedUserName)</option>
+                            }
+                        </select>
+                        <small class="text-muted">Ticket will be auto-assigned based on category.</small>
+                    </div>
+                }
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" @bind="newTicket.Status">
+                            <option value="Open">Open</option>
+                            <option value="InProgress">In Progress</option>
+                            <option value="Closed">Closed</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Priority</label>
+                        <select class="form-select" @bind="newTicket.Priority">
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 justify-content-end">
+                    <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                    <button class="btn btn-primary" @onclick="SaveTicket">
+                        @(isEditing ? "Update Ticket" : "Create Ticket")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showToast)
+{
+    <div class="toast-box toast-@toastType">@toastMessage</div>
+}
+
+<style>
+    .filter-input {
+        flex: 1; max-width: 260px;
+        padding: 0.45rem 0.85rem;
+        border-radius: 8px;
+        border: 1.5px solid rgba(255,255,255,0.2);
+        background: rgba(255,255,255,0.1);
+        color: white; font-size: 0.875rem; outline: none;
+    }
+    .filter-input::placeholder { color: rgba(255,255,255,0.5); }
+    .filter-input:focus { border-color: rgba(255,255,255,0.5); }
+
+    .filter-select {
+        padding: 0.45rem 0.75rem;
+        border-radius: 8px;
+        border: 1.5px solid rgba(255,255,255,0.2);
+        background: rgba(255,255,255,0.1);
+        color: white; font-size: 0.875rem; outline: none; cursor: pointer;
+    }
+    .filter-select option { background: #312e81; color: white; }
+
+    .btn-filter {
+        padding: 0.45rem 1rem; background: #7c3aed; color: white;
+        border: none; border-radius: 8px; font-size: 0.875rem; cursor: pointer; white-space: nowrap;
+    }
+    .btn-filter:hover { opacity: 0.85; }
+
+    .btn-filter-clear {
+        padding: 0.45rem 0.85rem; background: transparent;
+        color: rgba(255,255,255,0.7);
+        border: 1.5px solid rgba(255,255,255,0.2);
+        border-radius: 8px; font-size: 0.875rem; cursor: pointer; white-space: nowrap;
+    }
+    .btn-filter-clear:hover { background: rgba(255,255,255,0.1); color: white; }
+
+    .content-header {
+        display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem;
+    }
+    .content-title { font-size: 1.5rem; font-weight: 700; color: #1e1b4b; margin: 0; }
+    .content-subtitle { color: #6b7280; font-size: 0.875rem; margin: 0; }
+
+    .btn-create {
+        background: linear-gradient(135deg, #059669, #10b981);
+        color: white; border: none; padding: 0.65rem 1.25rem; border-radius: 10px;
+        font-weight: 600; cursor: pointer; font-size: 0.9rem;
+        box-shadow: 0 4px 12px rgba(5,150,105,0.3); white-space: nowrap;
+    }
+    .btn-create:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    .loading-state, .empty-state { text-align: center; padding: 4rem 2rem; color: #6b7280; }
+    .empty-icon { font-size: 3rem; margin-bottom: 1rem; }
+
+    .tickets-table { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
+
+    .table-header {
+        display: grid;
+        grid-template-columns: 0.5fr 1.8fr 1fr 1fr 2fr 1fr 1fr 0.6fr 1fr;
+        padding: 0.75rem 1.25rem;
+        background: #f8f7ff; font-size: 0.78rem; font-weight: 700;
+        color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .table-row {
+        display: grid;
+        grid-template-columns: 0.5fr 1.8fr 1fr 1fr 2fr 1fr 1fr 0.6fr 1fr;
+        padding: 0.9rem 1.25rem; border-bottom: 1px solid #f3f4f6;
+        align-items: center; transition: background 0.15s; cursor: pointer;
+    }
+    .table-row:last-child { border-bottom: none; }
+    .table-row:hover { background: #fafafa; }
+
+    .col-id { color: #9ca3af; font-size: 0.82rem; font-weight: 600; }
+
+    .status-badge, .priority-badge {
+        display: inline-flex; align-items: center; gap: 0.3rem;
+        padding: 0.3rem 0.7rem; border-radius: 20px; font-size: 0.78rem; font-weight: 600;
+    }
+    .status-open { background: #fef2f2; color: #dc2626; }
+    .status-inprogress { background: #fffbeb; color: #d97706; }
+    .status-closed { background: #f0fdf4; color: #16a34a; }
+    .priority-low { background: #ecfeff; color: #0891b2; }
+    .priority-medium { background: #fffbeb; color: #d97706; }
+    .priority-high { background: #fef2f2; color: #dc2626; }
+
+    .days-badge {
+        background: #ecfdf5; color: #047857;
+        font-weight: 700; padding: 0.2rem 0.55rem;
+        border-radius: 12px; font-size: 0.78rem;
+    }
+
+    .col-actions { display: flex; gap: 0.4rem; }
+    .btn-action {
+        width: 32px; height: 32px; border: none; border-radius: 8px;
+        cursor: pointer; font-size: 0.9rem;
+        display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+    }
+    .btn-show { background: #f5f3ff; } .btn-show:hover { background: #ede9fe; }
+    .btn-edit { background: #eff6ff; } .btn-edit:hover { background: #dbeafe; }
+    .btn-delete { background: #fef2f2; } .btn-delete:hover { background: #fee2e2; }
+
+    .pagination-bar {
+        display: flex; align-items: center; justify-content: center;
+        gap: 1rem; padding: 1.25rem;
+    }
+    .page-btn {
+        padding: 0.5rem 1rem; border: 1.5px solid #e5e7eb; border-radius: 8px;
+        background: white; cursor: pointer; font-size: 0.875rem; transition: all 0.15s;
+    }
+    .page-btn:hover:not(:disabled) { border-color: #7c3aed; color: #7c3aed; }
+    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .page-info { font-size: 0.875rem; color: #6b7280; }
+
+    .modal-backdrop {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+        z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .modal-box {
+        background: white; border-radius: 16px; width: 100%; max-width: 560px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .modal-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 1.25rem 1.5rem; border-bottom: 1px solid #e5e7eb;
+    }
+    .modal-header h5 { margin: 0; font-weight: 700; color: #1e1b4b; }
+    .modal-close {
+        background: none; border: none; font-size: 1.1rem; cursor: pointer;
+        color: #6b7280; width: 32px; height: 32px; border-radius: 8px;
+    }
+    .modal-close:hover { background: #f3f4f6; }
+    .modal-body { padding: 1.5rem; }
+
+    .toast-box {
+        position: fixed; bottom: 1.5rem; right: 1.5rem;
+        padding: 0.875rem 1.5rem; border-radius: 10px;
+        font-weight: 600; font-size: 0.9rem; z-index: 9999;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        animation: slideIn 0.3s ease;
+    }
+    .toast-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .toast-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+    @@keyframes slideIn {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+</style>
+
+@code {
+    string search = "", status = "", priority = "";
+    int pageNumber = 1, pageSize = 10, totalItems = 0;
+    bool isLoading = false, showModal = false, isEditing = false;
+    bool showToast = false;
+    string toastMessage = "", toastType = "";
+    int selectedCategoryId = 0;
+
+    Ticket newTicket = new() { Status = "Open", Priority = "Low" };
+    List<Ticket> tickets = new();
+    List<CategoryOption> categories = new();
+
+    int TotalPages => Math.Max(1, (int)Math.Ceiling((double)totalItems / pageSize));
+    bool IsFirstPage => pageNumber == 1;
+    bool IsLastPage => pageNumber >= TotalPages;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitializeAsync();
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+        await LoadTickets();
+        await LoadCategories();
+    }
+
+    async Task LoadCategories()
+    {
+        try
+        {
+            var client = Http.CreateClient("API");
+            var result = await client.GetFromJsonAsync<List<CategoryOption>>("api/category");
+            categories = result ?? new();
+        }
+        catch { categories = new(); }
+    }
+
+    async Task ApplyFilters() { pageNumber = 1; await LoadTickets(); }
+
+    void ClearFilters()
+    {
+        search = ""; status = ""; priority = ""; pageNumber = 1;
+        _ = LoadTickets();
+    }
+
+    void ViewTicket(int id) => Navigation.NavigateTo($"/tickets/{id}");
+
+    void OpenCreateModal()
+    {
+        if (!AuthService.HasPermission("CanCreateTicket"))
+        { ShowToast("No permission to create tickets", "error"); return; }
+        isEditing = false;
+        newTicket = new Ticket { Status = "Open", Priority = "Low" };
+        selectedCategoryId = 0;
+        showModal = true;
+    }
+
+    void OpenEditModal(Ticket ticket)
+    {
+        if (!AuthService.HasPermission("CanEditTicket"))
+        { ShowToast("No permission to edit tickets", "error"); return; }
+        isEditing = true;
+        newTicket = new Ticket
+        {
+            Id = ticket.Id, Title = ticket.Title, Description = ticket.Description,
+            Status = ticket.Status, Priority = ticket.Priority
+        };
+        showModal = true;
+    }
+
+    void CloseModal()
+    {
+        showModal = false; isEditing = false;
+        newTicket = new Ticket { Status = "Open", Priority = "Low" };
+    }
+
+    async Task SaveTicket()
+    {
+        if (string.IsNullOrWhiteSpace(newTicket.Title) || string.IsNullOrWhiteSpace(newTicket.Description))
+        { ShowToast("Please fill in all required fields", "error"); return; }
+
+        if (!isEditing && selectedCategoryId == 0)
+        { ShowToast("Please select a category", "error"); return; }
+
+        var client = Http.CreateClient("API");
+        HttpResponseMessage response;
+
+        if (isEditing)
+        {
+            response = await client.PutAsJsonAsync($"api/ticket/{newTicket.Id}", newTicket);
+        }
+        else
+        {
+            var createDto = new
+            {
+                newTicket.Title, newTicket.Description, newTicket.Status, newTicket.Priority,
+                CreatedByUserId = AuthService.CurrentUser.Id,
+                CategoryId = selectedCategoryId > 0 ? (int?)selectedCategoryId : null
+            };
+            response = await client.PostAsJsonAsync("api/ticket", createDto);
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            ShowToast(isEditing ? "Ticket updated ✏️" : "Ticket created ✨", "success");
+            CloseModal(); pageNumber = 1; await LoadTickets();
+        }
+        else
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            string msg = "Failed to save ticket";
+            try { msg = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? msg; }
+            catch { }
+            ShowToast(msg, "error");
+        }
+    }
+
+    async Task LoadTickets()
+    {
+        isLoading = true; StateHasChanged();
+        var client = Http.CreateClient("API");
+
+        bool canViewAll = AuthService.HasPermission("CanViewAllTickets");
+        var url = $"api/ticket?search={search}&status={status}&priority={priority}&page={pageNumber}&pageSize={pageSize}";
+
+        if (canViewAll)
+        {
+            // Admin/SuperAdmin — see everything
+            url += "&viewAll=true";
+        }
+        else
+        {
+            // User/Technician — see only own/assigned tickets
+            url += $"&currentUserId={AuthService.CurrentUser.Id}&viewAll=false";
+        }
+
+        var result = await client.GetFromJsonAsync<TicketResponse>(url);
+        tickets = result?.Data ?? new();
+        totalItems = result?.TotalItems ?? 0;
+        isLoading = false;
+    }
+
+    async Task DeleteTicket(int id)
+    {
+        if (!AuthService.HasPermission("CanDeleteTicket"))
+        { ShowToast("No permission to delete tickets", "error"); return; }
+
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Delete this ticket?");
+        if (!confirmed) return;
+
+        var client = Http.CreateClient("API");
+        var response = await client.DeleteAsync($"api/ticket/{id}");
+        if (response.IsSuccessStatusCode) { ShowToast("Ticket deleted 🗑️", "success"); await LoadTickets(); }
+        else ShowToast("Failed to delete ticket", "error");
+    }
+
+    async Task NextPage() { pageNumber++; await LoadTickets(); }
+    async Task PreviousPage() { if (pageNumber > 1) { pageNumber--; await LoadTickets(); } }
+
+    void ShowToast(string msg, string type)
+    {
+        toastMessage = msg; toastType = type; showToast = true; StateHasChanged();
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(3000); showToast = false;
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    int GetDaysBetween(DateTime created, DateTime closed)
+        => (int)Math.Ceiling((closed - created).TotalDays);
+
+    string FormatStatus(string s) => s switch
+    {
+        "Open" => "Open",
+        "InProgress" => "In Progress",
+        "Closed" => "Closed",
+        _ => s
+    };
+
+    public class CategoryOption
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? AssignedUserName { get; set; }
+    }
+
+    public class TicketResponse
+    {
+        public int TotalItems { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+        public List<Ticket> Data { get; set; } = new();
+    }
+}

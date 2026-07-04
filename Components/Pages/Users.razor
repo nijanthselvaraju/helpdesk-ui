@@ -1,0 +1,283 @@
+@page "/users"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IHttpClientFactory Http
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@using TicketingSystem.UI.Services
+
+<AppShell>
+    <ChildContent>
+        <div class="content-header">
+            <div>
+                <h1 class="content-title">Users</h1>
+                <p class="content-subtitle">@users.Count user@(users.Count == 1 ? "" : "s") in the application</p>
+            </div>
+            <button class="btn-create" @onclick="OpenCreateModal">➕ New User</button>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="loading-state">Loading users...</div>
+        }
+        else
+        {
+            <div class="user-table">
+                <div class="table-header">
+                    <div>User</div>
+                    <div>Email</div>
+                    <div>Phone</div>
+                    <div>Role</div>
+                    <div>Status</div>
+                    <div>Actions</div>
+                </div>
+                @foreach (var u in users)
+                {
+                    <div class="table-row">
+                        <div class="col-user">
+                            <span class="avatar">@GetInitials(u.FirstName, u.LastName)</span>
+                            <span>@u.FirstName @u.LastName</span>
+                        </div>
+                        <div class="col-text">@u.Email</div>
+                        <div class="col-text">@(string.IsNullOrEmpty(u.PhoneNumber) ? "—" : u.PhoneNumber)</div>
+                        <div>
+                            <select class="form-select form-select-sm role-select"
+                                    value="@(u.Roles.FirstOrDefault() ?? "User")"
+                                    @onchange="e => ChangeRole(u, e.Value?.ToString())">
+                                <option value="User">User</option>
+                                <option value="Technician">Technician</option>
+                                <option value="Admin">Admin</option>
+                                <option value="SuperAdmin">SuperAdmin</option>
+                            </select>
+                        </div>
+                        <div class="col-status">
+                            <span class="status-dot @(u.IsActive ? "active" : "inactive")"></span>
+                            @(u.IsActive ? "Active" : "Inactive")
+                        </div>
+                        <div>
+                            <button class="btn-action btn-edit" @onclick="() => OpenEditModal(u)">✏️</button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </ChildContent>
+</AppShell>
+
+@if (showModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal-box" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h5>@(isEditing ? "✏️ Edit User" : "➕ New User")</h5>
+                <button class="modal-close" @onclick="CloseModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">First Name</label>
+                        <input type="text" class="form-control" value="@form.FirstName"
+                               @oninput="e => form.FirstName = e.Value?.ToString() ?? string.Empty" />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Last Name</label>
+                        <input type="text" class="form-control" value="@form.LastName"
+                               @oninput="e => form.LastName = e.Value?.ToString() ?? string.Empty" />
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email <span class="text-danger">*</span></label>
+                    <input type="email" class="form-control" value="@form.Email"
+                           @oninput="e => form.Email = e.Value?.ToString() ?? string.Empty" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Phone</label>
+                    <input type="text" class="form-control" value="@form.PhoneNumber"
+                           @oninput="e => form.PhoneNumber = e.Value?.ToString() ?? string.Empty" />
+                </div>
+                @if (!isEditing)
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Password <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" placeholder="Min 8 characters" value="@form.Password"
+                               @oninput="e => form.Password = e.Value?.ToString() ?? string.Empty" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Role</label>
+                        <select class="form-select" @bind="form.RoleId">
+                            <option value="3">User</option>
+                            <option value="4">Technician</option>
+                            <option value="2">Admin</option>
+                            <option value="1">SuperAdmin</option>
+                        </select>
+                    </div>
+                }
+                else
+                {
+                    <div class="mb-3">
+                        <label class="form-label">New Password <small class="text-muted">(leave blank to keep current)</small></label>
+                        <input type="password" class="form-control" placeholder="Leave blank to keep unchanged" value="@form.Password"
+                               @oninput="e => form.Password = e.Value?.ToString() ?? string.Empty" />
+                    </div>
+                }
+                <div class="d-flex gap-2 justify-content-end">
+                    <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                    <button class="btn btn-primary" @onclick="SaveUser">
+                        @(isEditing ? "Update User" : "Create User")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showToast)
+{
+    <div class="toast-box toast-@toastType">@toastMessage</div>
+}
+
+<style>
+    .content-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+    .content-title { font-size: 1.5rem; font-weight: 700; color: #1e1b4b; margin: 0; }
+    .content-subtitle { color: #6b7280; font-size: 0.875rem; margin: 0; }
+    .btn-create {
+        background: linear-gradient(135deg, #059669, #10b981);
+        color: white; border: none; padding: 0.65rem 1.25rem; border-radius: 10px;
+        font-weight: 600; cursor: pointer; font-size: 0.9rem;
+    }
+    .loading-state { text-align: center; padding: 4rem; color: #6b7280; }
+
+    .user-table { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
+    .table-header {
+        display: grid; grid-template-columns: 1.6fr 2fr 1fr 1.2fr 0.9fr 0.6fr;
+        padding: 0.75rem 1.25rem; background: #f8f7ff; font-size: 0.78rem; font-weight: 700;
+        color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #e5e7eb;
+    }
+    .table-row {
+        display: grid; grid-template-columns: 1.6fr 2fr 1fr 1.2fr 0.9fr 0.6fr;
+        padding: 0.85rem 1.25rem; border-bottom: 1px solid #f3f4f6; align-items: center; font-size: 0.875rem;
+    }
+    .table-row:last-child { border-bottom: none; }
+    .table-row:hover { background: #fafafa; }
+
+    .col-user { display: flex; align-items: center; gap: 0.6rem; font-weight: 600; color: #1f2937; }
+    .avatar {
+        width: 32px; height: 32px; background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        color: white; font-weight: 700; font-size: 0.75rem; flex-shrink: 0;
+    }
+    .col-text { color: #6b7280; }
+    .role-select { max-width: 150px; }
+    .col-status { display: flex; align-items: center; gap: 0.4rem; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .status-dot.active { background: #22c55e; }
+    .status-dot.inactive { background: #d1d5db; }
+
+    .btn-action {
+        width: 32px; height: 32px; border: none; border-radius: 8px; cursor: pointer;
+        font-size: 0.9rem; display: flex; align-items: center; justify-content: center;
+    }
+    .btn-edit { background: #eff6ff; } .btn-edit:hover { background: #dbeafe; }
+
+    .modal-backdrop {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000;
+        display: flex; align-items: center; justify-content: center; padding: 1rem;
+    }
+    .modal-box { background: white; border-radius: 16px; width: 100%; max-width: 480px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid #e5e7eb; }
+    .modal-header h5 { margin: 0; font-weight: 700; color: #1e1b4b; }
+    .modal-close { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #6b7280; width: 32px; height: 32px; border-radius: 8px; }
+    .modal-close:hover { background: #f3f4f6; }
+    .modal-body { padding: 1.5rem; }
+
+    .toast-box {
+        position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.875rem 1.5rem; border-radius: 10px;
+        font-weight: 600; font-size: 0.9rem; z-index: 9999; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    .toast-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .toast-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+</style>
+
+@code {
+    List<UserDto> users = new();
+    bool isLoading = true, showModal = false, isEditing = false, showToast = false;
+    string toastMessage = "", toastType = "";
+    UserForm form = new();
+
+    static readonly Dictionary<string, int> RoleIds = new()
+    {
+        { "SuperAdmin", 1 }, { "Admin", 2 }, { "User", 3 }, { "Technician", 4 }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitializeAsync();
+        if (!AuthService.IsAuthenticated) { Navigation.NavigateTo("/login"); return; }
+        if (!AuthService.HasPermission("CanManageUsers")) { Navigation.NavigateTo("/tickets"); return; }
+        await LoadUsers();
+    }
+
+    async Task LoadUsers()
+    {
+        isLoading = true;
+        users = await Http.CreateClient("API").GetFromJsonAsync<List<UserDto>>("api/users") ?? new();
+        isLoading = false;
+    }
+
+    void OpenCreateModal() { isEditing = false; form = new() { RoleId = 3 }; showModal = true; }
+    void OpenEditModal(UserDto u)
+    {
+        isEditing = true;
+        form = new() { Id = u.Id, FirstName = u.FirstName, LastName = u.LastName, Email = u.Email, PhoneNumber = u.PhoneNumber ?? "" };
+        showModal = true;
+    }
+    void CloseModal() => showModal = false;
+
+    async Task SaveUser()
+    {
+        if (string.IsNullOrWhiteSpace(form.Email)) { ShowToast("Email is required", "error"); return; }
+        if (!isEditing && form.Password.Length < 8) { ShowToast("Password must be at least 8 characters", "error"); return; }
+
+        var client = Http.CreateClient("API");
+        HttpResponseMessage response;
+
+        if (isEditing)
+        {
+            var dto = new { form.Email, form.FirstName, form.LastName, form.PhoneNumber, NewPassword = string.IsNullOrWhiteSpace(form.Password) ? null : form.Password };
+            response = await client.PutAsJsonAsync($"api/users/{form.Id}", dto);
+        }
+        else
+        {
+            var dto = new { form.Email, form.Password, form.FirstName, form.LastName, form.PhoneNumber, form.RoleId };
+            response = await client.PostAsJsonAsync("api/users", dto);
+        }
+
+        if (response.IsSuccessStatusCode) { ShowToast(isEditing ? "User updated" : "User created", "success"); CloseModal(); await LoadUsers(); }
+        else
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            string msg = "Failed to save user";
+            try { msg = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? msg; } catch { }
+            ShowToast(msg, "error");
+        }
+    }
+
+    async Task ChangeRole(UserDto user, string? newRole)
+    {
+        if (string.IsNullOrEmpty(newRole) || !RoleIds.ContainsKey(newRole)) return;
+        var response = await Http.CreateClient("API").PatchAsJsonAsync($"api/users/{user.Id}/role", new { RoleId = RoleIds[newRole] });
+        if (response.IsSuccessStatusCode) { ShowToast($"Role updated to {newRole}", "success"); await LoadUsers(); }
+        else ShowToast("Failed to update role", "error");
+    }
+
+    string GetInitials(string first, string last)
+        => ((string.IsNullOrEmpty(first) ? "" : first[0].ToString()) + (string.IsNullOrEmpty(last) ? "" : last[0].ToString())).ToUpper();
+
+    void ShowToast(string msg, string type)
+    {
+        toastMessage = msg; toastType = type; showToast = true; StateHasChanged();
+        _ = Task.Run(async () => { await Task.Delay(3000); showToast = false; await InvokeAsync(StateHasChanged); });
+    }
+
+    public class UserDto { public int Id { get; set; } public string FirstName { get; set; } = ""; public string LastName { get; set; } = ""; public string Email { get; set; } = ""; public string? PhoneNumber { get; set; } public bool IsActive { get; set; } public List<string> Roles { get; set; } = new(); }
+    public class UserForm { public int Id { get; set; } public string FirstName { get; set; } = ""; public string LastName { get; set; } = ""; public string Email { get; set; } = ""; public string PhoneNumber { get; set; } = ""; public string Password { get; set; } = ""; public int RoleId { get; set; } = 3; }
+}

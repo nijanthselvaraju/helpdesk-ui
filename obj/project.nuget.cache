@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "72RgeZcHbzE=",
+  "success": true,
+  "projectFilePath": "D:\\Vb\\VKP\\Ticket\\TicketingSystem.UI\\TicketingSystem.UI.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\tvis2\\.nuget\\packages\\microsoft.aspnetcore.app.internal.assets\\10.0.9\\microsoft.aspnetcore.app.internal.assets.10.0.9.nupkg.sha512"
+  ],
+  "logs": []
+}

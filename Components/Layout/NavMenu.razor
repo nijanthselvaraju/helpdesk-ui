@@ -1,0 +1,94 @@
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+@using TicketingSystem.UI.Services
+@implements IDisposable
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid d-flex justify-content-between align-items-center">
+        <a class="navbar-brand" href="/">🎫 Helpdesk Ticket</a>
+
+        @if (AuthService.IsAuthenticated)
+        {
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-light">
+                    @AuthService.CurrentUser.Name
+                    <small class="opacity-75">(@AuthService.CurrentUser.Email)</small>
+                </span>
+                <button class="btn btn-sm btn-outline-light" @onclick="HandleLogout">
+                    🚪 Logout
+                </button>
+            </div>
+        }
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column">
+        @if (AuthService.IsAuthenticated)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="/tickets" Match="NavLinkMatch.All">
+                    <span class="bi bi-ticket-fill" aria-hidden="true"></span> Tickets
+                </NavLink>
+            </div>
+
+            @if (AuthService.HasPermission("CanManageCategories"))
+            {
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="/categories" Match="NavLinkMatch.Prefix">
+                        <span class="bi bi-tags-fill" aria-hidden="true"></span> Categories
+                    </NavLink>
+                </div>
+            }
+
+            @if (AuthService.HasPermission("CanManageUsers"))
+            {
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="/users" Match="NavLinkMatch.Prefix">
+                        <span class="bi bi-people-fill" aria-hidden="true"></span> Users
+                    </NavLink>
+                </div>
+            }
+
+            @if (AuthService.IsSuperAdmin())
+            {
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="/roles" Match="NavLinkMatch.Prefix">
+                        <span class="bi bi-shield-lock-fill" aria-hidden="true"></span> Roles &amp; Permissions
+                    </NavLink>
+                </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="/admin" Match="NavLinkMatch.Prefix">
+                        <span class="bi bi-gear-fill" aria-hidden="true"></span> Admin
+                    </NavLink>
+                </div>
+            }
+        }
+    </nav>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        AuthService.OnAuthStateChanged += OnAuthChanged;
+    }
+
+    private void OnAuthChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleLogout()
+    {
+        await AuthService.Logout();
+        Navigation.NavigateTo("/login", forceLoad: true);
+    }
+
+    public void Dispose()
+    {
+        AuthService.OnAuthStateChanged -= OnAuthChanged;
+    }
+}

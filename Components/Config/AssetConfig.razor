@@ -1,0 +1,337 @@
+@page "/config/assets"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IHttpClientFactory Http
+@inject AuthService AuthService
+@inject AssetService AssetService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@using TicketingSystem.UI.Services
+
+<AppShell>
+    <ChildContent>
+        <div class="content-header">
+            <div>
+                <h1 class="content-title">Asset Config</h1>
+                <p class="content-subtitle">Upload and manage system images</p>
+            </div>
+        </div>
+
+        <div class="assets-grid">
+
+            <!-- Logo -->
+            <div class="asset-card">
+                <div class="asset-info">
+                    <h4>Logo</h4>
+                    <p class="asset-hint">Shown in the top navbar. Recommended: 200×60px PNG</p>
+                </div>
+                <div class="asset-preview-box">
+                    @if (!string.IsNullOrEmpty(logoUrl))
+                    {
+                        <img src="@(apiBase + logoUrl + "?v=" + cacheBust)" alt="Logo" class="asset-preview" />
+                        <button class="btn-remove" @onclick="RemoveLogo">✕ Remove</button>
+                    }
+                    else
+                    {
+                        <div class="asset-placeholder">
+                            <span>🖼️</span>
+                            <p>No logo uploaded</p>
+                        </div>
+                    }
+                </div>
+                <div class="asset-upload">
+                    <InputFile id="input-logo" OnChange="HandleLogoUpload"
+                               accept=".png,.jpg,.jpeg,.svg,.webp"
+                               style="display:none" />
+                    <button class="btn-upload" @onclick="ClickLogo">
+                        📁 Choose File
+                    </button>
+                    @if (uploadingAsset == "logo")
+                    {
+                        <span class="uploading-badge">Uploading...</span>
+                    }
+                </div>
+            </div>
+
+            <!-- Login Background -->
+            <div class="asset-card">
+                <div class="asset-info">
+                    <h4>Login Background</h4>
+                    <p class="asset-hint">Left panel on the login page. Recommended: 1920×1080px</p>
+                </div>
+                <div class="asset-preview-box">
+                    @if (!string.IsNullOrEmpty(loginBgUrl))
+                    {
+                        <img src="@(apiBase + loginBgUrl + "?v=" + cacheBust)" alt="Login BG" class="asset-preview" />
+                        <button class="btn-remove" @onclick="RemoveLoginBg">✕ Remove</button>
+                    }
+                    else
+                    {
+                        <div class="asset-placeholder">
+                            <span>🖼️</span>
+                            <p>No background uploaded</p>
+                        </div>
+                    }
+                </div>
+                <div class="asset-upload">
+                    <InputFile id="input-loginbg" OnChange="HandleLoginBgUpload"
+                               accept=".png,.jpg,.jpeg,.webp"
+                               style="display:none" />
+                    <button class="btn-upload" @onclick="ClickLoginBg">📁 Choose File</button>
+                    @if (uploadingAsset == "login-bg")
+                    {
+                        <span class="uploading-badge">Uploading...</span>
+                    }
+                </div>
+            </div>
+
+            <!-- Favicon -->
+            <div class="asset-card">
+                <div class="asset-info">
+                    <h4>Favicon</h4>
+                    <p class="asset-hint">Browser tab icon. Recommended: 512×512px PNG or ICO</p>
+                </div>
+                <div class="asset-preview-box">
+                    @if (!string.IsNullOrEmpty(faviconUrl))
+                    {
+                        <img src="@(apiBase + faviconUrl + "?v=" + cacheBust)" alt="Favicon" class="asset-preview favicon-preview" />
+                        <button class="btn-remove" @onclick="RemoveFavicon">✕ Remove</button>
+                    }
+                    else
+                    {
+                        <div class="asset-placeholder">
+                            <span>🌐</span>
+                            <p>No favicon uploaded</p>
+                        </div>
+                    }
+                </div>
+                <div class="asset-upload">
+                    <InputFile id="input-favicon" OnChange="HandleFaviconUpload"
+                               accept=".ico,.png"
+                               style="display:none" />
+                    <button class="btn-upload" @onclick="ClickFavicon">📁 Choose File</button>
+                    @if (uploadingAsset == "favicon")
+                    {
+                        <span class="uploading-badge">Uploading...</span>
+                    }
+                </div>
+            </div>
+
+        </div>
+    </ChildContent>
+</AppShell>
+
+@if (showToast)
+{
+    <div class="toast-box toast-@toastType">@toastMessage</div>
+}
+
+<style>
+    .content-header { margin-bottom: 1.75rem; }
+    .content-title { font-size: 1.5rem; font-weight: 700; color: #1e1b4b; margin: 0; }
+    .content-subtitle { color: #6b7280; font-size: 0.875rem; margin: 0; }
+
+    .assets-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .asset-card {
+        background: white; border-radius: 14px; padding: 1.5rem;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        display: flex; flex-direction: column; gap: 1rem;
+    }
+
+    .asset-info h4 { margin: 0 0 0.25rem; font-size: 1rem; font-weight: 700; color: #1e1b4b; }
+    .asset-hint { margin: 0; font-size: 0.8rem; color: #9ca3af; }
+
+    .asset-preview-box {
+        background: #f8f7ff; border: 2px dashed #e5e7eb; border-radius: 10px;
+        min-height: 160px; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 0.5rem;
+        position: relative; overflow: hidden;
+    }
+
+    .asset-preview { max-width: 100%; max-height: 150px; object-fit: contain; border-radius: 6px; }
+    .favicon-preview { max-width: 80px; max-height: 80px; }
+
+    .asset-placeholder { text-align: center; color: #9ca3af; padding: 1rem; }
+    .asset-placeholder span { font-size: 2.5rem; display: block; margin-bottom: 0.5rem; }
+    .asset-placeholder p { margin: 0; font-size: 0.85rem; }
+
+    .btn-remove {
+        position: absolute; top: 0.5rem; right: 0.5rem;
+        background: rgba(239,68,68,0.9); color: white; border: none;
+        padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.75rem;
+        cursor: pointer; font-weight: 600;
+    }
+    .btn-remove:hover { background: #dc2626; }
+
+    .asset-upload { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+
+    .btn-upload {
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        color: white; border: none; padding: 0.55rem 1rem; border-radius: 8px;
+        font-size: 0.875rem; font-weight: 600; cursor: pointer;
+        transition: opacity 0.2s;
+    }
+    .btn-upload:hover { opacity: 0.9; }
+
+    .uploading-badge {
+        background: #fffbeb; color: #d97706; border: 1px solid #fcd34d;
+        padding: 0.3rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+        animation: pulse 1s infinite;
+    }
+    @@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    .toast-box {
+        position: fixed; bottom: 1.5rem; right: 1.5rem;
+        padding: 0.875rem 1.5rem; border-radius: 10px;
+        font-weight: 600; font-size: 0.9rem; z-index: 9999;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    .toast-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .toast-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+</style>
+
+@code {
+    string? logoUrl, loginBgUrl, faviconUrl;
+    string? uploadingAsset;
+    bool showToast = false;
+    string toastMessage = "", toastType = "";
+    string apiBase = "http://localhost:5027";
+    string cacheBust = DateTime.Now.Ticks.ToString();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitializeAsync();
+        if (!AuthService.IsAuthenticated) { Navigation.NavigateTo("/login"); return; }
+        if (!AuthService.IsSuperAdmin() && !AuthService.HasRole("Admin"))
+        {
+            Navigation.NavigateTo("/tickets");
+            return;
+        }
+        await LoadAssets();
+    }
+
+    async Task LoadAssets()
+    {
+        try
+        {
+            var client = Http.CreateClient("API");
+            var result = await client.GetFromJsonAsync<Dictionary<string, string?>>("api/assets/list");
+            if (result != null)
+            {
+                logoUrl = result.GetValueOrDefault("logo");
+                loginBgUrl = result.GetValueOrDefault("login-bg");
+                faviconUrl = result.GetValueOrDefault("favicon");
+            }
+        }
+        catch { }
+    }
+
+    async Task ClickLogo() => await JS.InvokeVoidAsync("eval", "document.getElementById('input-logo').click()");
+    async Task ClickLoginBg() => await JS.InvokeVoidAsync("eval", "document.getElementById('input-loginbg').click()");
+    async Task ClickFavicon() => await JS.InvokeVoidAsync("eval", "document.getElementById('input-favicon').click()");
+
+    async Task HandleLogoUpload(InputFileChangeEventArgs e) => await UploadFile(e, "logo", url => logoUrl = url);
+    async Task HandleLoginBgUpload(InputFileChangeEventArgs e) => await UploadFile(e, "login-bg", url => loginBgUrl = url);
+    async Task HandleFaviconUpload(InputFileChangeEventArgs e) => await UploadFile(e, "favicon", url => faviconUrl = url);
+
+    async Task RemoveLogo() => await DeleteAsset("logo", () => logoUrl = null);
+    async Task RemoveLoginBg() => await DeleteAsset("login-bg", () => loginBgUrl = null);
+    async Task RemoveFavicon() => await DeleteAsset("favicon", () => faviconUrl = null);
+
+    async Task UploadFile(InputFileChangeEventArgs e, string assetName, Action<string> setUrl)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            ShowToast("File too large. Maximum 5MB.", "error");
+            return;
+        }
+
+        uploadingAsset = assetName;
+        StateHasChanged();
+
+        try
+        {
+            var client = Http.CreateClient("API");
+            using var content = new MultipartFormDataContent();
+            using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            var fileContent = new StreamContent(stream);
+            fileContent.Headers.ContentType =
+                new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+            content.Add(fileContent, "file", file.Name);
+
+            var response = await client.PostAsync($"api/assets/upload/{assetName}", content);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<UploadResult>();
+                setUrl(result?.Url ?? "");
+                cacheBust = DateTime.Now.Ticks.ToString();
+                await AssetService.LoadAssetsAsync();
+                ShowToast("Uploaded successfully!", "success");
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                string msg = "Upload failed";
+                try
+                {
+                    msg = System.Text.Json.JsonDocument.Parse(body)
+                        .RootElement.GetProperty("message").GetString() ?? msg;
+                }
+                catch { }
+                ShowToast(msg, "error");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast($"Error: {ex.Message}", "error");
+        }
+        finally
+        {
+            uploadingAsset = null;
+            StateHasChanged();
+        }
+    }
+
+    async Task DeleteAsset(string assetName, Action clearUrl)
+    {
+        try
+        {
+            var response = await Http.CreateClient("API").DeleteAsync($"api/assets/{assetName}");
+            if (response.IsSuccessStatusCode)
+            {
+                clearUrl();
+                cacheBust = DateTime.Now.Ticks.ToString();
+                await AssetService.LoadAssetsAsync();
+                ShowToast("Asset removed", "success");
+            }
+            else ShowToast("Failed to remove", "error");
+        }
+        catch { ShowToast("Failed to remove", "error"); }
+    }
+
+    void ShowToast(string msg, string type)
+    {
+        toastMessage = msg; toastType = type; showToast = true; StateHasChanged();
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(3000);
+            showToast = false;
+            await InvokeAsync(StateHasChanged);
+        });
+    }
+
+    public class UploadResult
+    {
+        public string? Message { get; set; }
+        public string? FileName { get; set; }
+        public string? Url { get; set; }
+    }
+}

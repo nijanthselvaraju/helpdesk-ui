@@ -1,0 +1,685 @@
+@page "/tickets/{TicketId:int}"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IHttpClientFactory Http
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@using TicketingSystem.UI.Services
+@implements IDisposable
+
+<AppShell>
+    <ChildContent>
+        @if (isLoading)
+        {
+            <div class="loading-state">
+                <div class="spinner-border text-primary"></div>
+                <p>Loading ticket...</p>
+            </div>
+        }
+        else if (ticket == null)
+        {
+            <div class="empty-state">
+                <h5>Ticket not found</h5>
+                <button class="btn btn-primary mt-3" @onclick="GoBack">Back to Tickets</button>
+            </div>
+        }
+        else
+        {
+            <div class="detail-layout">
+                <!-- Left: Ticket Info -->
+                <div class="info-panel">
+                    <div class="info-card">
+                        <div class="info-header">
+                            <span class="ticket-id">#@ticket.Id</span>
+                            <span class="status-badge status-@ticket.Status.ToLower()">@FormatStatus(ticket.Status)</span>
+                        </div>
+                        <h2 class="ticket-title">@ticket.Title</h2>
+                        <p class="ticket-desc">@ticket.Description</p>
+
+                        <div class="info-divider"></div>
+
+                        <div class="info-row">
+                            <span class="info-label">Priority</span>
+                            <span class="priority-badge priority-@ticket.Priority.ToLower()">@ticket.Priority</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Category</span>
+                            <span class="info-value">@(ticket.CategoryName ?? "—")</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Requester</span>
+                            <span class="info-value">@(ticket.CreatedByName ?? "Unknown")</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Technician</span>
+                            @if (AuthService.HasPermission("CanAssignTicket"))
+                            {
+                                @if (ticket.Status == "Closed")
+                                {
+                                    // Locked — cannot reassign closed ticket
+                                    <span class="info-value locked-field">
+                                        @(ticket.AssignedToName ?? "Unassigned") 🔒
+                                    </span>
+                                }
+                                else
+                                {
+                                    <select class="form-select form-select-sm assign-select"
+                                            @bind="selectedTechnicianId" @bind:after="AssignTechnician">
+                                        <option value="0">Unassigned</option>
+                                        @foreach (var tech in technicians)
+                                        {
+                                            <option value="@tech.Id">@tech.FirstName @tech.LastName</option>
+                                        }
+                                    </select>
+                                }
+                            }
+                            else
+                            {
+                                <span class="info-value">@(ticket.AssignedToName ?? "Unassigned")</span>
+                            }
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Created</span>
+                            <span class="info-value">@ticket.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy HH:mm")</span>
+                        </div>
+                        @if (ticket.UpdatedAt != null)
+                        {
+                            <div class="info-row">
+                                <span class="info-label">Updated</span>
+                                <span class="info-value">@ticket.UpdatedAt.Value.ToLocalTime().ToString("MMM dd, yyyy HH:mm")</span>
+                            </div>
+                        }
+
+                        @if (ticket.Status != "Closed")
+                        {
+                            <div class="info-divider"></div>
+
+                            @* Status update for edit permission (excluding close) *@
+                            @if (AuthService.HasPermission("CanEditTicket"))
+                            {
+                                <label class="info-label">Update Status</label>
+                                <select class="form-select form-select-sm mt-1"
+                                        @bind="ticket.Status" @bind:after="UpdateStatus">
+                                    <option value="Open">Open</option>
+                                    <option value="InProgress">In Progress</option>
+                                    @if (AuthService.HasPermission("CanCloseTicket"))
+                                    {
+                                        <option value="Closed">Closed</option>
+                                    }
+                                </select>
+                            }
+
+                            @* Dedicated Close button for CanCloseTicket *@
+                            @if (AuthService.HasPermission("CanCloseTicket"))
+                            {
+                                <button class="btn-close-ticket" @onclick="CloseTicket">
+                                    🔒 Close Ticket
+                                </button>
+                            }
+                        }
+
+                        @if (ticket.Status == "Closed")
+                        {
+                            <div class="info-divider"></div>
+                            <div class="closed-notice">
+                                🔒 This ticket is closed. No further replies are allowed.
+                            </div>
+
+                            @* Admin/SuperAdmin can reopen anytime *@
+                            @if (AuthService.HasPermission("CanReopenTicket"))
+                            {
+                                <button class="btn-reopen btn-reopen-admin" @onclick="ReopenTicket">
+                                    🔓 Reopen Ticket
+                                </button>
+                            }
+                            @* Requester can reopen within 48 hours *@
+                            else if (ticket.CreatedByUserId == AuthService.CurrentUser.Id)
+                            {
+                                var closedAt = ticket.UpdatedAt ?? ticket.CreatedAt;
+                                var hoursLeft = 48 - (DateTime.Now - closedAt.ToLocalTime()).TotalHours;
+
+                                @if (hoursLeft > 0)
+                                {
+                                    <button class="btn-reopen btn-reopen-requester" @onclick="ReopenAsRequester">
+                                        🔓 Reopen Ticket
+                                        <span class="reopen-timer">(@((int)hoursLeft)h left)</span>
+                                    </button>
+                                }
+                                else
+                                {
+                                    <div class="reopen-expired">
+                                        ⏰ Reopen window expired. Contact an Admin to reopen.
+                                    </div>
+                                }
+                            }
+                        }
+                    </div>
+                </div>
+
+                <!-- Right: Conversation -->
+                <div class="conversation-panel">
+                    <div class="conversation-header">
+                        <h4>💬 Conversation</h4>
+                        <span class="comment-count">@comments.Count repl@(comments.Count == 1 ? "y" : "ies")</span>
+                    </div>
+
+                    <div class="conversation-thread" id="chat-thread">
+                        @if (comments.Count == 0)
+                        {
+                            <div class="no-comments">No replies yet. Start the conversation below.</div>
+                        }
+                        else
+                        {
+                            @foreach (var c in comments)
+                            {
+                                var isMe = c.UserId == AuthService.CurrentUser.Id;
+                                var isTech = c.UserId == ticket.AssignedToUserId;
+                                var isRequester = c.UserId == ticket.CreatedByUserId;
+
+                                <div class="comment-bubble @(isMe ? "comment-mine" : "comment-other")">
+                                    <div class="comment-meta">
+                                        <span class="comment-author">
+                                            @c.UserName
+                                            @if (isTech)
+                                            { <span class="role-tag tech-tag">Technician</span> }
+                                            else if (isRequester)
+                                            { <span class="role-tag req-tag">Requester</span> }
+                                        </span>
+                                        <span class="comment-time">@c.CreatedAt.ToLocalTime().ToString("MMM dd, HH:mm")</span>
+                                    </div>
+                                    <div class="comment-text">@c.Message</div>
+                                </div>
+                            }
+                        }
+                    </div>
+
+                    @if (ticket.Status == "Closed")
+                    {
+                        <div class="reply-closed">
+                            🔒 Ticket is closed — use the Reopen button on the left to continue the conversation.
+                        </div>
+                    }
+                    else if (CanReply())
+                    {
+                        <div class="reply-box">
+                            <textarea class="reply-input"
+                                      placeholder="Type your reply..."
+                                      rows="3"
+                                      value="@newComment"
+                                      @oninput="e => newComment = e.Value?.ToString() ?? string.Empty"
+                                      @onkeydown="HandleReplyKeyDown"></textarea>
+                            <button class="btn-send" @onclick="SendComment" disabled="@isSending">
+                                @if (isSending)
+                                { <span class="spinner-sm"></span> }
+                                else
+                                { <span>Send →</span> }
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="reply-closed">You don't have permission to reply to this ticket.</div>
+                    }
+                </div>
+            </div>
+        }
+    </ChildContent>
+</AppShell>
+
+@if (showToast)
+{
+    <div class="toast-box toast-@toastType">@toastMessage</div>
+}
+
+<style>
+    .loading-state, .empty-state { text-align: center; padding: 5rem 2rem; color: #6b7280; }
+
+    .detail-layout {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        gap: 1.5rem;
+        align-items: start;
+    }
+
+    @@media (max-width: 900px) { .detail-layout { grid-template-columns: 1fr; } }
+
+    /* Info Panel */
+    .info-card {
+        background: white; border-radius: 14px; padding: 1.5rem;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08); position: sticky; top: 1.75rem;
+    }
+
+    .info-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+    .ticket-id { color: #9ca3af; font-size: 0.85rem; font-weight: 600; }
+    .ticket-title { font-size: 1.15rem; font-weight: 700; color: #1e1b4b; margin: 0 0 0.5rem; }
+    .ticket-desc { color: #4b5563; font-size: 0.875rem; line-height: 1.5; margin-bottom: 1rem; }
+
+    .info-divider { border-top: 1px solid #f3f4f6; margin: 1rem 0; }
+
+    .info-row {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 0.45rem 0; font-size: 0.875rem;
+    }
+    .info-label { color: #9ca3af; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
+    .info-value { color: #1f2937; font-weight: 500; }
+
+    .assign-select { max-width: 160px; }
+
+    .status-badge, .priority-badge {
+        padding: 0.3rem 0.75rem; border-radius: 20px; font-size: 0.78rem; font-weight: 600;
+    }
+    .status-open { background: #fef2f2; color: #dc2626; }
+    .status-inprogress { background: #fffbeb; color: #d97706; }
+    .status-closed { background: #f0fdf4; color: #16a34a; }
+    .priority-low { background: #ecfeff; color: #0891b2; }
+    .priority-medium { background: #fffbeb; color: #d97706; }
+    .priority-high { background: #fef2f2; color: #dc2626; }
+
+    .closed-notice {
+        background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0;
+        border-radius: 8px; padding: 0.75rem; font-size: 0.85rem; font-weight: 500;
+    }
+
+    .btn-close-ticket {
+        width: 100%; margin-top: 0.75rem;
+        padding: 0.65rem 1rem; border: none; border-radius: 8px;
+        font-size: 0.875rem; font-weight: 600; cursor: pointer;
+        background: linear-gradient(135deg, #dc2626, #b91c1c);
+        color: white; transition: opacity 0.2s;
+        display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    }
+    .btn-close-ticket:hover { opacity: 0.85; }
+
+    .locked-field { color: #9ca3af; font-style: italic; }
+
+    .btn-reopen {
+        width: 100%; margin-top: 0.75rem;
+        padding: 0.65rem 1rem; border: none; border-radius: 8px;
+        font-size: 0.875rem; font-weight: 600; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+        transition: opacity 0.2s;
+    }
+    .btn-reopen:hover { opacity: 0.85; }
+
+    .btn-reopen-admin {
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        color: white;
+    }
+
+    .btn-reopen-requester {
+        background: linear-gradient(135deg, #059669, #10b981);
+        color: white;
+    }
+
+    .reopen-timer {
+        font-size: 0.75rem;
+        opacity: 0.85;
+        font-weight: 400;
+    }
+
+    .reopen-expired {
+        background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa;
+        border-radius: 8px; padding: 0.75rem; font-size: 0.82rem;
+        font-weight: 500; margin-top: 0.75rem; text-align: center;
+    }
+
+    /* Conversation Panel */
+    .conversation-panel {
+        background: white; border-radius: 14px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        display: flex; flex-direction: column;
+    }
+
+    .conversation-header {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 1.25rem 1.5rem; border-bottom: 1px solid #f3f4f6;
+    }
+    .conversation-header h4 { margin: 0; color: #1e1b4b; font-size: 1.05rem; }
+    .comment-count { color: #9ca3af; font-size: 0.85rem; }
+
+    .conversation-thread {
+        flex: 1; padding: 1.25rem 1.5rem; overflow-y: auto;
+        display: flex; flex-direction: column; gap: 1rem;
+        max-height: 480px; min-height: 200px;
+    }
+
+    .no-comments { text-align: center; color: #9ca3af; padding: 3rem 1rem; font-size: 0.875rem; }
+
+    .comment-bubble {
+        max-width: 75%; padding: 0.85rem 1.1rem; border-radius: 14px;
+        animation: fadeIn 0.2s ease;
+    }
+    .comment-other { background: #f3f4f6; align-self: flex-start; border-bottom-left-radius: 4px; }
+    .comment-mine { background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+
+    .comment-meta { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.3rem; font-size: 0.78rem; }
+    .comment-other .comment-meta { color: #6b7280; }
+    .comment-mine .comment-meta { color: rgba(255,255,255,0.8); }
+    .comment-author { font-weight: 700; display: flex; align-items: center; gap: 0.4rem; }
+
+    .role-tag { font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: 8px; font-weight: 700; text-transform: uppercase; }
+    .tech-tag { background: #ddd6fe; color: #5b21b6; }
+    .req-tag { background: #dbeafe; color: #1e40af; }
+    .comment-mine .tech-tag, .comment-mine .req-tag { background: rgba(255,255,255,0.25); color: white; }
+
+    .comment-text { font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; }
+
+    .reply-box {
+        padding: 1.25rem 1.5rem; border-top: 1px solid #f3f4f6;
+        display: flex; gap: 0.75rem; align-items: flex-end;
+    }
+
+    .reply-input {
+        flex: 1; border: 1.5px solid #e5e7eb; border-radius: 10px;
+        padding: 0.65rem 0.9rem; font-size: 0.9rem; resize: none;
+        outline: none; font-family: inherit; transition: border-color 0.2s;
+    }
+    .reply-input:focus { border-color: #7c3aed; }
+
+    .btn-send {
+        background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white;
+        border: none; padding: 0.7rem 1.25rem; border-radius: 10px;
+        font-weight: 600; cursor: pointer; font-size: 0.875rem; white-space: nowrap;
+        transition: opacity 0.2s;
+    }
+    .btn-send:hover:not(:disabled) { opacity: 0.9; }
+    .btn-send:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .reply-closed {
+        padding: 1rem 1.5rem; border-top: 1px solid #f3f4f6;
+        color: #9ca3af; font-size: 0.85rem; text-align: center;
+        background: #fafafa; border-radius: 0 0 14px 14px;
+    }
+
+    .spinner-sm {
+        width: 14px; height: 14px;
+        border: 2px solid rgba(255,255,255,0.4);
+        border-top-color: white; border-radius: 50%;
+        animation: spin 0.7s linear infinite; display: inline-block; flex-shrink: 0;
+    }
+
+    .toast-box {
+        position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.875rem 1.5rem;
+        border-radius: 10px; font-weight: 600; font-size: 0.9rem; z-index: 9999;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    .toast-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .toast-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+    @@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    @@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
+@code {
+    [Parameter] public int TicketId { get; set; }
+
+    TicketDetailDto? ticket;
+    List<CommentDto> comments = new();
+    List<UserDto> technicians = new();
+    string newComment = "";
+    bool isLoading = true, isSending = false, showToast = false;
+    System.Threading.Timer? _pollTimer;
+    int _lastCommentCount = 0;
+    string toastMessage = "", toastType = "";
+    int selectedTechnicianId = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitializeAsync();
+        if (!AuthService.IsAuthenticated) { Navigation.NavigateTo("/login"); return; }
+
+        // Load ticket and comments in parallel for instant display
+        var ticketTask = LoadTicket();
+        var commentsTask = LoadComments();
+
+        if (AuthService.HasPermission("CanAssignTicket"))
+            await Task.WhenAll(ticketTask, commentsTask, LoadTechnicians());
+        else
+            await Task.WhenAll(ticketTask, commentsTask);
+
+        isLoading = false;
+        _lastCommentCount = comments.Count;
+
+        // Poll for new comments every 5 seconds
+        _pollTimer = new System.Threading.Timer(async _ =>
+        {
+            try
+            {
+                var client = Http.CreateClient("API");
+                var result = await client.GetFromJsonAsync<List<CommentDto>>($"api/ticket/{TicketId}/comments");
+                var updated = result ?? new();
+
+                if (updated.Count != _lastCommentCount)
+                {
+                    comments = updated;
+                    _lastCommentCount = updated.Count;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch { }
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    async Task LoadTicket()
+    {
+        var client = Http.CreateClient("API");
+        ticket = await client.GetFromJsonAsync<TicketDetailDto>($"api/ticket/{TicketId}");
+        selectedTechnicianId = ticket?.AssignedToUserId ?? 0;
+    }
+
+    async Task LoadComments()
+    {
+        var client = Http.CreateClient("API");
+        var result = await client.GetFromJsonAsync<List<CommentDto>>($"api/ticket/{TicketId}/comments");
+        comments = result ?? new();
+    }
+
+    async Task LoadTechnicians()
+    {
+        try
+        {
+            var client = Http.CreateClient("API");
+            var result = await client.GetFromJsonAsync<List<UserDto>>("api/users/technicians");
+            technicians = result ?? new();
+        }
+        catch { technicians = new(); }
+    }
+
+    bool CanReply()
+    {
+        if (ticket == null || ticket.Status == "Closed") return false;
+        if (!AuthService.HasPermission("CanCommentTicket")) return false;
+
+        var userId = AuthService.CurrentUser.Id;
+        return ticket.CreatedByUserId == userId
+            || ticket.AssignedToUserId == userId
+            || AuthService.HasRole("Admin")
+            || AuthService.HasRole("SuperAdmin");
+    }
+
+    async Task HandleReplyKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && e.CtrlKey)
+            await SendComment();
+    }
+
+    async Task SendComment()
+    {
+        if (string.IsNullOrWhiteSpace(newComment)) return;
+        if (ticket?.Status == "Closed") { ShowToast("Cannot reply to a closed ticket", "error"); return; }
+
+        isSending = true;
+        var client = Http.CreateClient("API");
+        var dto = new { UserId = AuthService.CurrentUser.Id, Message = newComment.Trim() };
+        var response = await client.PostAsJsonAsync($"api/ticket/{TicketId}/comments", dto);
+
+        if (response.IsSuccessStatusCode)
+        {
+            // Optimistically add the comment instantly without waiting for reload
+            var newMsg = new CommentDto
+            {
+                Id = 0,
+                TicketId = TicketId,
+                Message = newComment.Trim(),
+                CreatedAt = DateTime.UtcNow,
+                UserId = AuthService.CurrentUser.Id,
+                UserName = AuthService.CurrentUser.Name
+            };
+            comments.Add(newMsg);
+            newComment = "";
+            // Then reload in background to get server-side ID
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(500);
+                await LoadComments();
+                await InvokeAsync(StateHasChanged);
+            });
+        }
+        else
+        {
+            ShowToast("Failed to send reply", "error");
+        }
+
+        isSending = false;
+    }
+
+    async Task UpdateStatus()
+    {
+        if (ticket == null) return;
+        var client = Http.CreateClient("API");
+        await client.PutAsJsonAsync($"api/ticket/{TicketId}", new
+        {
+            ticket.Title, ticket.Description,
+            Status = ticket.Status, Priority = ticket.Priority
+        });
+        // Reload ticket to reflect any server-side changes
+        await LoadTicket();
+        StateHasChanged();
+    }
+
+    async Task AssignTechnician()
+    {
+        var client = Http.CreateClient("API");
+        await client.PatchAsJsonAsync($"api/ticket/{TicketId}/assign", new { TechnicianUserId = selectedTechnicianId });
+        await LoadTicket();
+        StateHasChanged();
+    }
+
+    void ShowToast(string msg, string type)
+    {
+        toastMessage = msg; toastType = type; showToast = true; StateHasChanged();
+        _ = Task.Run(async () => { await Task.Delay(3000); showToast = false; await InvokeAsync(StateHasChanged); });
+    }
+
+    string FormatStatus(string s) => s switch
+    {
+        "Open" => "Open",
+        "InProgress" => "In Progress",
+        "Closed" => "Closed",
+        _ => s
+    };
+
+    void GoBack() => Navigation.NavigateTo("/tickets");
+
+    async Task CloseTicket()
+    {
+        if (ticket == null) return;
+        var client = Http.CreateClient("API");
+        var dto = new
+        {
+            ticket.Title,
+            ticket.Description,
+            Status = "Closed",
+            Priority = ticket.Priority
+        };
+        var response = await client.PutAsJsonAsync($"api/ticket/{TicketId}", dto);
+        if (response.IsSuccessStatusCode)
+        {
+            ticket.Status = "Closed";
+            ticket.UpdatedAt = DateTime.Now;
+            ShowToast("Ticket closed 🔒", "success");
+            StateHasChanged();
+        }
+        else ShowToast("Failed to close ticket", "error");
+    }
+
+    async Task ReopenTicket()
+    {
+        var client = Http.CreateClient("API");
+        var response = await client.PatchAsJsonAsync($"api/ticket/{TicketId}/reopen",
+            new { IsRequester = false });
+
+        if (response.IsSuccessStatusCode)
+        {
+            ShowToast("Ticket reopened ✅", "success");
+            await LoadTicket();
+            StateHasChanged();
+        }
+        else
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            string msg = "Failed to reopen ticket";
+            try { msg = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? msg; } catch { }
+            ShowToast(msg, "error");
+        }
+    }
+
+    async Task ReopenAsRequester()
+    {
+        var client = Http.CreateClient("API");
+        var response = await client.PatchAsJsonAsync($"api/ticket/{TicketId}/reopen",
+            new { IsRequester = true });
+
+        if (response.IsSuccessStatusCode)
+        {
+            ShowToast("Ticket reopened ✅", "success");
+            await LoadTicket();
+            StateHasChanged();
+        }
+        else
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            string msg = "Failed to reopen";
+            try { msg = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? msg; } catch { }
+            ShowToast(msg, "error");
+        }
+    }
+
+    public void Dispose()
+    {
+        _pollTimer?.Dispose();
+    }
+
+    public class TicketDetailDto
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string Status { get; set; } = "";
+        public string Priority { get; set; } = "";
+        public DateTime CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+        public int? CreatedByUserId { get; set; }
+        public string? CreatedByName { get; set; }
+        public int? AssignedToUserId { get; set; }
+        public string? AssignedToName { get; set; }
+        public string? CategoryName { get; set; }
+    }
+
+    public class CommentDto
+    {
+        public int Id { get; set; }
+        public int TicketId { get; set; }
+        public string Message { get; set; } = "";
+        public DateTime CreatedAt { get; set; }
+        public int UserId { get; set; }
+        public string UserName { get; set; } = "";
+        public string UserEmail { get; set; } = "";
+    }
+
+    public class UserDto
+    {
+        public int Id { get; set; }
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+    }
+}

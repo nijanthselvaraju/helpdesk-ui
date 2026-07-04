@@ -1,0 +1,173 @@
+@page "/roles"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IHttpClientFactory Http
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@using TicketingSystem.UI.Services
+
+<AppShell>
+    <ChildContent>
+        <div class="content-header">
+            <div>
+                <h1 class="content-title">Roles &amp; Permissions</h1>
+                <p class="content-subtitle">Click any cell to toggle a permission for that role</p>
+            </div>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="loading-state">Loading permissions matrix...</div>
+        }
+        else
+        {
+            <div class="matrix-wrapper">
+                <table class="matrix-table">
+                    <thead>
+                        <tr>
+                            <th class="perm-col">Permission</th>
+                            @foreach (var role in roles)
+                            {
+                                <th class="role-col">
+                                    <div class="role-name">@role.Name</div>
+                                    <div class="role-desc">@role.Description</div>
+                                </th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var perm in permissions)
+                        {
+                            <tr>
+                                <td class="perm-cell">
+                                    <div class="perm-name">@perm.Name</div>
+                                    <div class="perm-desc">@perm.Description</div>
+                                </td>
+                                @foreach (var role in roles)
+                                {
+                                    var granted = IsGranted(role.Id, perm.Id);
+                                    var key = (role.Id, perm.Id);
+                                    <td class="toggle-cell">
+                                        <button class="toggle-btn @(granted ? "granted" : "denied") @(pending.Contains(key) ? "pending" : "")"
+                                                @onclick="() => TogglePermission(role.Id, perm.Id)"
+                                                disabled="@pending.Contains(key)">
+                                            @if (pending.Contains(key))
+                                            { <span class="mini-spinner"></span> }
+                                            else if (granted)
+                                            { <span>✓</span> }
+                                            else
+                                            { <span>—</span> }
+                                        </button>
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </ChildContent>
+</AppShell>
+
+@if (showToast)
+{
+    <div class="toast-box toast-@toastType">@toastMessage</div>
+}
+
+<style>
+    .content-header { margin-bottom: 1.25rem; }
+    .content-title { font-size: 1.5rem; font-weight: 700; color: #1e1b4b; margin: 0; }
+    .content-subtitle { color: #6b7280; font-size: 0.875rem; margin: 0; }
+    .loading-state { text-align: center; padding: 4rem; color: #6b7280; }
+
+    .matrix-wrapper { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow-x: auto; }
+    .matrix-table { width: 100%; border-collapse: collapse; }
+    .matrix-table th, .matrix-table td { padding: 0.75rem 1rem; border-bottom: 1px solid #f3f4f6; }
+    .perm-col { min-width: 220px; text-align: left; }
+    .role-col { text-align: center; min-width: 130px; }
+    .role-name { font-weight: 700; color: #1e1b4b; font-size: 0.875rem; }
+    .role-desc { font-size: 0.72rem; color: #9ca3af; }
+    .perm-cell { }
+    .perm-name { font-weight: 600; color: #1f2937; font-size: 0.85rem; }
+    .perm-desc { font-size: 0.72rem; color: #9ca3af; margin-top: 0.1rem; }
+    .toggle-cell { text-align: center; }
+
+    .toggle-btn {
+        width: 36px; height: 36px; border-radius: 8px; border: 1.5px solid transparent;
+        font-weight: 700; font-size: 1rem; cursor: pointer; transition: all 0.15s;
+        display: inline-flex; align-items: center; justify-content: center;
+    }
+    .toggle-btn.granted { background: #ecfdf5; color: #059669; border-color: #a7f3d0; }
+    .toggle-btn.granted:hover { background: #d1fae5; }
+    .toggle-btn.denied { background: #f9fafb; color: #d1d5db; border-color: #e5e7eb; }
+    .toggle-btn.denied:hover { background: #f3f4f6; color: #9ca3af; }
+    .toggle-btn.pending { opacity: 0.6; cursor: wait; }
+
+    .mini-spinner {
+        width: 12px; height: 12px; border: 2px solid rgba(0,0,0,0.15);
+        border-top-color: #7c3aed; border-radius: 50%; animation: spin 0.6s linear infinite; display: inline-block;
+    }
+    @@keyframes spin { to { transform: rotate(360deg); } }
+
+    .toast-box {
+        position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.875rem 1.5rem; border-radius: 10px;
+        font-weight: 600; font-size: 0.9rem; z-index: 9999; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    .toast-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .toast-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+</style>
+
+@code {
+    List<RoleDto> roles = new();
+    List<PermissionDto> permissions = new();
+    HashSet<(int RoleId, int PermissionId)> grants = new();
+    HashSet<(int RoleId, int PermissionId)> pending = new();
+    bool isLoading = true, showToast = false;
+    string toastMessage = "", toastType = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitializeAsync();
+        if (!AuthService.IsAuthenticated) { Navigation.NavigateTo("/login"); return; }
+        if (!AuthService.IsSuperAdmin() && !AuthService.HasRole("Admin")) { Navigation.NavigateTo("/tickets"); return; }
+        await LoadMatrix();
+    }
+
+    async Task LoadMatrix()
+    {
+        isLoading = true;
+        var result = await Http.CreateClient("API").GetFromJsonAsync<MatrixResponse>("api/role-permissions/matrix");
+        roles = result?.Roles ?? new();
+        permissions = result?.Permissions ?? new();
+        grants = (result?.Grants ?? new()).Select(g => (g.RoleId, g.PermissionId)).ToHashSet();
+        isLoading = false;
+    }
+
+    bool IsGranted(int roleId, int permissionId) => grants.Contains((roleId, permissionId));
+
+    async Task TogglePermission(int roleId, int permissionId)
+    {
+        var key = (roleId, permissionId);
+        if (pending.Contains(key)) return;
+        pending.Add(key); StateHasChanged();
+
+        var response = await Http.CreateClient("API").PostAsJsonAsync("api/role-permissions/toggle", new { RoleId = roleId, PermissionId = permissionId });
+        if (response.IsSuccessStatusCode)
+        {
+            if (grants.Contains(key)) grants.Remove(key); else grants.Add(key);
+        }
+        else ShowToast("Failed to update permission", "error");
+
+        pending.Remove(key); StateHasChanged();
+    }
+
+    void ShowToast(string msg, string type)
+    {
+        toastMessage = msg; toastType = type; showToast = true; StateHasChanged();
+        _ = Task.Run(async () => { await Task.Delay(3000); showToast = false; await InvokeAsync(StateHasChanged); });
+    }
+
+    public class RoleDto { public int Id { get; set; } public string Name { get; set; } = ""; public string? Description { get; set; } }
+    public class PermissionDto { public int Id { get; set; } public string Name { get; set; } = ""; public string? Description { get; set; } }
+    public class GrantDto { public int RoleId { get; set; } public int PermissionId { get; set; } }
+    public class MatrixResponse { public List<RoleDto> Roles { get; set; } = new(); public List<PermissionDto> Permissions { get; set; } = new(); public List<GrantDto> Grants { get; set; } = new(); }
+}

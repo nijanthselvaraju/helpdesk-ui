@@ -1,0 +1,29 @@
+@namespace TicketingSystem.UI.Components
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+@if (AuthService.IsAuthenticated)
+{
+    @ChildContent
+}
+else
+{
+    <div class="alert alert-warning" role="alert">
+        <strong>Access Denied</strong> - You need to log in first. Redirecting...
+    </div>
+}
+
+@code {
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitializeAsync();
+
+        if (!AuthService.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/login", forceLoad: true);
+        }
+    }
+}
