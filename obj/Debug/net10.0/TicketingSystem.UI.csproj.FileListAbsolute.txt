@@ -66,8 +66,6 @@ D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\compressed\d74u12cik5-{0}-
 D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\compressed\639lo5jlhh-{0}-63fj8s7r0e-63fj8s7r0e.gz
 D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\compressed\auoczlfk9g-{0}-0j3bgjxly4-0j3bgjxly4.gz
 D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\compressed\79htys3yvi-{0}-abdmv1u4y3-abdmv1u4y3.gz
-D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\compressed\9xr1fs8zqa-{0}-ne14ti1q68-ne14ti1q68.gz
-D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\compressed\u6sffkppug-{0}-ig5xotzpx5-ig5xotzpx5.gz
 D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\staticwebassets.build.json
 D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\staticwebassets.build.json.cache
 D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\staticwebassets.development.json
@@ -81,3 +79,7 @@ D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\ref\TicketingSystem.UI.dll
 D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\compressed\avnze576kg-{0}-8isd8hufka-8isd8hufka.gz
 D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\compressed\eu1u9w32jq-{0}-vic3zwrgga-vic3zwrgga.gz
 D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\compressed\i6o1w8pmk5-{0}-vic3zwrgga-vic3zwrgga.gz
+D:\Vb\VKP\Ticket\TicketingSystem.UI\bin\Debug\net10.0\NuGet.config
+D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\TicketingSystem.UI.sourcelink.json
+D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\compressed\9xr1fs8zqa-{0}-f7fxoh55ae-f7fxoh55ae.gz
+D:\Vb\VKP\Ticket\TicketingSystem.UI\obj\Debug\net10.0\compressed\u6sffkppug-{0}-68qhiysw0j-68qhiysw0j.gz

@@ -1,0 +1,625 @@
+@page "/tickets/create"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IHttpClientFactory Http
+@inject NavigationManager Nav
+@inject AuthService AuthService
+@inject IJSRuntime JS
+@using TicketingSystem.UI.Models
+@using TicketingSystem.UI.Services
+
+<AppShell>
+    <ChildContent>
+        <div class="create-ticket-wrapper">
+            <div class="create-ticket-header">
+                <button class="btn-back" @onclick='() => Nav.NavigateTo("/tickets")'>
+                    ← Back
+                </button>
+                <h4>New Ticket</h4>
+            </div>
+
+            <div class="create-ticket-card">
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="alert alert-danger">@errorMessage</div>
+                }
+
+                <div class="field-group">
+                    <label>TITLE <span class="required">*</span></label>
+                    <input class="form-control" placeholder="Brief summary of the issue"
+                           @bind="title" />
+                </div>
+
+                <div class="field-group">
+                    <label>DESCRIPTION <span class="required">*</span></label>
+                    <textarea class="form-control description-box"
+                              placeholder="Describe the issue in detail..."
+                              @bind="description"></textarea>
+                </div>
+
+                <div class="field-row">
+                    <div class="field-group half">
+                        <label>PRIORITY</label>
+                        <select class="form-select" @bind="priority">
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                        </select>
+                    </div>
+
+                    <div class="field-group half">
+                        <label>CATEGORY <span class="required">*</span></label>
+                        <select class="form-select" @bind="selectedCategoryId">
+                            <option value="0">-- Select --</option>
+                            @foreach (var cat in categories)
+                            {
+                                <option value="@cat.Id">@cat.Name</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                @* Attachments *@
+                <div class="field-group">
+                    <label>ATTACHMENTS <span class="optional">(optional)</span></label>
+                    <div class="attach-drop-zone" @onclick="TriggerFileUpload">
+                        <span class="attach-icon">📎</span>
+                        <span>Click to attach files</span>
+                        <span class="attach-hint">Images, PDF, Word, Excel — max 10MB each</span>
+                    </div>
+
+                    @if (pendingAttachments.Count > 0)
+                    {
+                        <div class="pending-attachments">
+                            @foreach (var att in pendingAttachments)
+                            {
+                                <div class="pending-item">
+                                    @if (att.IsImage)
+                                    {
+                                        <img src="@att.PreviewUrl" class="pending-img"
+                                             @onclick="() => OpenLightbox(att.PreviewUrl, att.FileName)" />
+                                    }
+                                    else
+                                    {
+                                        <div class="pending-file">
+                                            <span class="pending-file-icon">
+                                                @(att.FileName.EndsWith(".pdf") ? "📄" :
+                                                  att.FileName.EndsWith(".doc") || att.FileName.EndsWith(".docx") ? "📝" :
+                                                  att.FileName.EndsWith(".xls") || att.FileName.EndsWith(".xlsx") ? "📊" : "📎")
+                                            </span>
+                                            <span class="pending-file-name">@(att.FileName.Length > 12 ? att.FileName[..12] + "…" : att.FileName)</span>
+                                        </div>
+                                    }
+                                    <button class="btn-remove-att" @onclick="() => pendingAttachments.Remove(att)">✕</button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <button class="btn-submit" @onclick="HandleSubmit" disabled="@isSubmitting">
+                    🎫 @(isSubmitting ? "Submitting..." : "Submit Ticket")
+                </button>
+
+            </div>
+        </div>
+    </ChildContent>
+</AppShell>
+
+@* Lightbox for image preview *@
+@if (lightboxUrl != null)
+{
+    <div class="lightbox-backdrop" @onclick="CloseLightbox">
+        <div class="lightbox-box" @onclick:stopPropagation="true">
+            <div class="lightbox-header">
+                <span class="lightbox-name">@lightboxName</span>
+                <button class="btn-lightbox-close" @onclick="CloseLightbox">✕</button>
+            </div>
+            <div class="lightbox-body">
+                <img src="@lightboxUrl" class="lightbox-img" alt="@lightboxName" />
+            </div>
+        </div>
+    </div>
+}
+
+@if (showToast)
+{
+    <div class="toast-box toast-@toastType">@toastMessage</div>
+}
+
+<script>
+    window.createTicketAttachments = {
+        openPicker: function(dotNetRef) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt';
+            input.multiple = true;
+            input.onchange = async function() {
+                for (const file of input.files) {
+                    await window.createTicketAttachments.uploadFile(file, dotNetRef);
+                }
+            };
+            input.click();
+        },
+
+        uploadFile: async function(file, dotNetRef) {
+            if (file.size > 10 * 1024 * 1024) {
+                await dotNetRef.invokeMethodAsync('OnAttachError', 'File too large. Max 10MB.');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await fetch('http://localhost:5027/api/attachments/upload', {
+                    method: 'POST', body: formData
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    const previewUrl = data.isImage ? 'http://localhost:5027' + data.url : '';
+                    await dotNetRef.invokeMethodAsync('OnAttachSuccess',
+                        data.fileName, data.url, data.isImage, previewUrl);
+                } else {
+                    await dotNetRef.invokeMethodAsync('OnAttachError', data.message || 'Upload failed');
+                }
+            } catch(e) {
+                await dotNetRef.invokeMethodAsync('OnAttachError', 'Network error during upload');
+            }
+        }
+    };
+</script>
+
+<style>
+    .create-ticket-wrapper {
+        width: 100%;
+        padding: 0.6rem 1rem;
+        box-sizing: border-box;
+    }
+
+    .create-ticket-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+        .create-ticket-header h4 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin: 0;
+        }
+
+    .btn-back {
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 6px 14px;
+        font-size: 0.875rem;
+        color: #6c63ff;
+        cursor: pointer;
+        font-weight: 500;
+    }
+
+        .btn-back:hover {
+            background: #f0f0f0;
+        }
+
+    .create-ticket-card {
+        background: white;
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+        display: flex;
+        flex-direction: column;
+        gap: 1.4rem;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .field-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+    }
+
+        .field-group label {
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: #333;
+        }
+
+    .required {
+        color: red;
+    }
+
+    .optional {
+        color: #9ca3af;
+        font-weight: 400;
+        text-transform: none;
+        font-size: 0.75rem;
+    }
+
+    .form-control, .form-select {
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        padding: 10px 14px;
+        font-size: 0.95rem;
+    }
+
+    .description-box {
+        min-height: 180px;
+        height: calc(100vh - 480px);
+        resize: vertical;
+    }
+
+    .field-row {
+        display: flex;
+        gap: 1.2rem;
+    }
+
+    .field-group.half {
+        flex: 1;
+    }
+
+    .attach-drop-zone {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        border: 2px dashed #d1d5db;
+        border-radius: 10px;
+        padding: 0.6rem 1rem;
+        cursor: pointer;
+        color: #6b7280;
+        font-size: 0.875rem;
+        transition: all 0.2s;
+    }
+
+        .attach-drop-zone:hover {
+            border-color: #7c3aed;
+            background: #faf5ff;
+            color: #7c3aed;
+        }
+
+    .attach-icon {
+        font-size: 1rem;
+    }
+
+    .attach-hint {
+        font-size: 0.75rem;
+        color: #9ca3af;
+    }
+
+    .pending-attachments {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+
+    .pending-item {
+        position: relative;
+        width: 80px;
+        height: 80px;
+        border-radius: 8px;
+        overflow: visible;
+        flex-shrink: 0;
+    }
+
+    .pending-img {
+        width: 80px;
+        height: 80px;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 2px solid #e5e7eb;
+        display: block;
+        cursor: zoom-in;
+    }
+
+    .pending-file {
+        width: 80px;
+        height: 80px;
+        background: #f3f4f6;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 0.2rem;
+        padding: 0.4rem;
+        box-sizing: border-box;
+    }
+
+    .pending-file-icon {
+        font-size: 1.6rem;
+    }
+
+    .pending-file-name {
+        font-size: 0.6rem;
+        color: #374151;
+        text-align: center;
+        word-break: break-all;
+        line-height: 1.2;
+    }
+
+    .btn-remove-att {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        background: #374151;
+        color: white;
+        border: 2px solid white;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 0.6rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+    }
+
+        .btn-remove-att:hover {
+            background: #dc2626;
+        }
+
+    .btn-submit {
+        background: #4f46e5;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 14px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        width: 100%;
+        margin-top: 0.5rem;
+    }
+
+        .btn-submit:hover {
+            background: #4338ca;
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+    /* Lightbox */
+    .lightbox-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.85);
+        z-index: 9000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+
+    .lightbox-box {
+        background: #1f2937;
+        border-radius: 12px;
+        max-width: 90vw;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+    }
+
+    .lightbox-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        background: #111827;
+        flex-shrink: 0;
+    }
+
+    .lightbox-name {
+        color: #e5e7eb;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .btn-lightbox-close {
+        background: rgba(255,255,255,0.1);
+        border: none;
+        color: white;
+        width: 30px;
+        height: 30px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .btn-lightbox-close:hover {
+            background: rgba(239,68,68,0.5);
+        }
+
+    .lightbox-body {
+        overflow: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+
+    .lightbox-img {
+        max-width: 100%;
+        max-height: 75vh;
+        object-fit: contain;
+        border-radius: 6px;
+    }
+
+    .toast-box {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        padding: 0.875rem 1.5rem;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        z-index: 9999;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+
+    .toast-success {
+        background: #f0fdf4;
+        color: #16a34a;
+        border: 1px solid #bbf7d0;
+    }
+
+    .toast-error {
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+    }
+</style>
+
+@code {
+    private string title = "";
+    private string description = "";
+    private string priority = "Low";
+    private int selectedCategoryId = 0;
+    private string errorMessage = "";
+    private bool isSubmitting = false;
+    private bool showToast = false;
+    private string toastMessage = "", toastType = "";
+    private string? lightboxUrl, lightboxName;
+
+    private List<CategoryOption> categories = new();
+    private List<PendingAttachment> pendingAttachments = new();
+    private DotNetObjectReference<CreateTicket>? _dotNetRef;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitializeAsync();
+        if (!AuthService.IsAuthenticated)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+        await LoadCategories();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+        }
+        await Task.CompletedTask;
+    }
+
+    async Task LoadCategories()
+    {
+        try
+        {
+            var client = Http.CreateClient("API");
+            var result = await client.GetFromJsonAsync<List<CategoryOption>>("api/category");
+            categories = result ?? new();
+        }
+        catch { categories = new(); }
+    }
+
+    async Task TriggerFileUpload()
+    {
+        if (_dotNetRef == null) _dotNetRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("createTicketAttachments.openPicker", _dotNetRef);
+    }
+
+    [JSInvokable]
+    public Task OnAttachSuccess(string fileName, string url, bool isImage, string previewUrl)
+    {
+        pendingAttachments.Add(new PendingAttachment { FileName = fileName, Url = url, IsImage = isImage, PreviewUrl = previewUrl });
+        return InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task OnAttachError(string message)
+    {
+        ShowToast(message, "error");
+        return InvokeAsync(StateHasChanged);
+    }
+
+    void OpenLightbox(string url, string name) { lightboxUrl = url; lightboxName = name; StateHasChanged(); }
+    void CloseLightbox() { lightboxUrl = null; lightboxName = null; StateHasChanged(); }
+
+    private async Task HandleSubmit()
+    {
+        errorMessage = "";
+
+        if (string.IsNullOrWhiteSpace(title)) { errorMessage = "Title is required."; return; }
+        if (string.IsNullOrWhiteSpace(description)) { errorMessage = "Description is required."; return; }
+        if (selectedCategoryId == 0) { errorMessage = "Please select a category."; return; }
+
+        isSubmitting = true;
+        try
+        {
+            var client = Http.CreateClient("API");
+
+            // Send attachments inside the ticket DTO — stored as ticket-level attachments, not comments
+            var createDto = new
+            {
+                Title = title,
+                Description = description,
+                Status = "Open",
+                Priority = priority,
+                CreatedByUserId = AuthService.CurrentUser.Id,
+                CategoryId = selectedCategoryId,
+                Attachments = pendingAttachments.Select(a => new { a.FileName, a.Url, a.IsImage }).ToList()
+            };
+            var response = await client.PostAsJsonAsync("api/ticket", createDto);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                string msg = "Failed to create ticket";
+                try { msg = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? msg; }
+                catch { }
+                errorMessage = msg;
+                return;
+            }
+
+            Nav.NavigateTo("/tickets");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to create ticket: " + ex.Message;
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    void ShowToast(string msg, string type)
+    {
+        toastMessage = msg; toastType = type; showToast = true; StateHasChanged();
+        _ = Task.Run(async () => { await Task.Delay(3000); showToast = false; await InvokeAsync(StateHasChanged); });
+    }
+
+    public void Dispose() { _dotNetRef?.Dispose(); }
+
+    public class CategoryOption
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    public class PendingAttachment
+    {
+        public string FileName { get; set; } = "";
+        public string Url { get; set; } = "";
+        public bool IsImage { get; set; }
+        public string PreviewUrl { get; set; } = "";
+    }
+}
