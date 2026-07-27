@@ -10,7 +10,11 @@
     <div class="top-navbar">
         <div class="top-navbar-left">
             <button class="sidebar-toggle" @onclick="TogglePin" title="Pin/unpin sidebar">
-                ☰
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="4" x2="20" y1="6" y2="6" />
+                    <line x1="4" x2="20" y1="12" y2="12" />
+                    <line x1="4" x2="20" y1="18" y2="18" />
+                </svg>
             </button>
             @if (!string.IsNullOrEmpty(AssetService.LogoUrl))
             {
@@ -33,7 +37,13 @@
                     <span class="profile-name">@AuthService.CurrentUser.Name</span>
                     <span class="profile-email">@AuthService.CurrentUser.Email</span>
                 </div>
-                <button class="btn-logout" @onclick="HandleLogout">🚪</button>
+                <button class="btn-logout" @onclick="HandleLogout" title="Logout">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" x2="9" y1="12" y2="12" />
+                    </svg>
+                </button>
             </div>
         </div>
     </div>
@@ -53,57 +63,132 @@
                     <button class="pin-btn @(SidebarState.IsPinned ? "pinned" : "")"
                             @onclick="TogglePin"
                             title="@(SidebarState.IsPinned ? "Unpin sidebar" : "Pin sidebar")">
-                        📌
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" x2="12" y1="17" y2="22" />
+                            <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
+                        </svg>
                     </button>
                 </div>
                 <nav class="sidebar-nav">
+
                     <a href="/tickets" class="nav-item @(IsActive("/tickets") ? "active" : "")" title="Tickets">
-                        <span class="nav-icon">🎫</span>
+                        <span class="nav-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z" />
+                                <path d="M13 5v2" />
+                                <path d="M13 17v2" />
+                                <path d="M13 11v2" />
+                            </svg>
+                        </span>
                         @if (SidebarState.IsExpanded)
                         {
                             <span class="nav-label">Tickets</span>
                         }
                     </a>
+
                     @if (AuthService.HasPermission("CanManageCategories"))
                     {
                         <a href="/categories" class="nav-item @(IsActive("/categories") ? "active" : "")" title="Categories">
-                            <span class="nav-icon">🗂️</span>
+                            <span class="nav-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect width="7" height="7" x="3" y="3" rx="1" />
+                                    <rect width="7" height="7" x="14" y="3" rx="1" />
+                                    <rect width="7" height="7" x="14" y="14" rx="1" />
+                                    <rect width="7" height="7" x="3" y="14" rx="1" />
+                                </svg>
+                            </span>
                             @if (SidebarState.IsExpanded)
                             {
                                 <span class="nav-label">Categories</span>
                             }
                         </a>
                     }
+
                     @if (AuthService.HasPermission("CanManageUsers"))
                     {
                         <a href="/users" class="nav-item @(IsActive("/users") ? "active" : "")" title="Users">
-                            <span class="nav-icon">👥</span>
+                            <span class="nav-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                                    <circle cx="9" cy="7" r="4" />
+                                    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                                </svg>
+                            </span>
                             @if (SidebarState.IsExpanded)
                             {
                                 <span class="nav-label">Users</span>
                             }
                         </a>
                     }
+
                     @if (AuthService.IsSuperAdmin() || AuthService.HasRole("Admin"))
                     {
                         <a href="/roles" class="nav-item @(IsActive("/roles") ? "active" : "")" title="Roles & Permissions">
-                            <span class="nav-icon">🔐</span>
+                            <span class="nav-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                </svg>
+                            </span>
                             @if (SidebarState.IsExpanded)
                             {
                                 <span class="nav-label">Roles &amp; Permissions</span>
                             }
                         </a>
                     }
+
                     @if (AuthService.IsSuperAdmin() || AuthService.HasRole("Admin"))
                     {
-                        <a href="/config/assets" class="nav-item @(IsActive("/config") ? "active" : "")" title="Config">
-                            <span class="nav-icon">🛠️</span>
-                            @if (SidebarState.IsExpanded)
+                        <div class="nav-group">
+                            <button class="nav-item nav-group-toggle @(IsActive("/config") ? "active" : "")"
+                                    @onclick="ToggleConfigGroup" title="Config">
+                                <span class="nav-icon">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                                        <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                </span>
+                                @if (SidebarState.IsExpanded)
+                                {
+                                    <span class="nav-label">Config</span>
+                                    <span class="nav-chevron @(configGroupOpen ? "chevron-open" : "")">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="m9 18 6-6-6-6" />
+                                        </svg>
+                                    </span>
+                                }
+                            </button>
+                            @if (configGroupOpen && SidebarState.IsExpanded)
                             {
-                                <span class="nav-label">Config</span>
+                                <div class="nav-sub">
+                                    <a href="/config/assets"
+                                       class="nav-item nav-sub-item @(Navigation.Uri.Contains("/config/assets") ? "active" : "")"
+                                       title="Asset Config">
+                                        <span class="nav-sub-arrow">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M5 12h14" />
+                                                <path d="m12 5 7 7-7 7" />
+                                            </svg>
+                                        </span>
+                                        <span class="nav-label">Asset Config</span>
+                                    </a>
+                                    <a href="/config/entities"
+                                       class="nav-item nav-sub-item @(Navigation.Uri.Contains("/config/entities") ? "active" : "")"
+                                       title="Entity Config">
+                                        <span class="nav-sub-arrow">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M5 12h14" />
+                                                <path d="m12 5 7 7-7 7" />
+                                            </svg>
+                                        </span>
+                                        <span class="nav-label">Entity Config</span>
+                                    </a>
+                                </div>
                             }
-                        </a>
+                        </div>
                     }
+
                 </nav>
             </div>
         </div>
@@ -121,66 +206,83 @@
     }
 
     :root {
-        --sidebar-width: 220px;
-        --sidebar-collapsed-width: 64px;
+        --sidebar-width: 230px;
+        --sidebar-collapsed-width: 52px;
+        --navbar-height: 52px;
+        --sidebar-bg: #1a1d2e;
+        --sidebar-hover: rgba(255,255,255,0.06);
+        --sidebar-active: rgba(99,102,241,0.18);
+        --sidebar-active-border: #6366f1;
+        --nav-text: rgba(255,255,255,0.65);
+        --nav-text-active: #fff;
+        --content-bg: #f0f2f7;
+        --navbar-bg: #111827;
+    }
+
+    body {
+        font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+        font-size: 13px;
+        background: var(--content-bg);
     }
 
     .app-shell {
         min-height: 100vh;
+        background: var(--content-bg);
     }
 
+    /* ── Top Navbar ── */
     .top-navbar {
         position: fixed;
         top: 0;
         left: 0;
         right: 0;
-        height: 60px;
-        background: linear-gradient(135deg, #1e1b4b, #312e81);
+        height: var(--navbar-height);
+        background: var(--navbar-bg);
         display: flex;
         align-items: center;
-        padding: 0 1.25rem;
-        gap: 1rem;
+        padding: 0 1rem;
+        gap: 0.75rem;
         z-index: 1000;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.3);
     }
 
     .top-navbar-left {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
+        gap: 0.6rem;
         min-width: 180px;
     }
 
     .sidebar-toggle {
-        background: rgba(255,255,255,0.1);
+        background: none;
         border: none;
-        color: white;
-        font-size: 1.25rem;
-        width: 36px;
-        height: 36px;
-        border-radius: 8px;
+        color: rgba(255,255,255,0.7);
+        width: 34px;
+        height: 34px;
+        border-radius: 6px;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background 0.2s;
+        transition: background 0.15s;
         flex-shrink: 0;
     }
 
         .sidebar-toggle:hover {
-            background: rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.1);
+            color: white;
         }
 
     .app-brand {
         color: white;
         font-weight: 700;
-        font-size: 1rem;
+        font-size: 0.95rem;
         white-space: nowrap;
     }
 
     .app-logo {
-        height: 40px;
-        max-width: 160px;
+        height: 34px;
+        max-width: 140px;
         object-fit: contain;
     }
 
@@ -204,16 +306,16 @@
     }
 
     .profile-avatar {
-        width: 36px;
-        height: 36px;
-        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        width: 32px;
+        height: 32px;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
         color: white;
         font-weight: 700;
-        font-size: 0.85rem;
+        font-size: 0.78rem;
         flex-shrink: 0;
     }
 
@@ -224,56 +326,58 @@
 
     .profile-name {
         color: white;
-        font-size: 0.85rem;
+        font-size: 0.82rem;
         font-weight: 600;
         line-height: 1.2;
         white-space: nowrap;
     }
 
     .profile-email {
-        color: rgba(255,255,255,0.55);
-        font-size: 0.75rem;
+        color: rgba(255,255,255,0.45);
+        font-size: 0.7rem;
         line-height: 1.2;
         white-space: nowrap;
     }
 
     .btn-logout {
-        background: rgba(255,255,255,0.1);
+        background: none;
         border: none;
-        color: white;
-        width: 34px;
-        height: 34px;
-        border-radius: 8px;
+        color: rgba(255,255,255,0.6);
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
         cursor: pointer;
-        font-size: 1rem;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background 0.2s;
+        transition: all 0.15s;
         flex-shrink: 0;
     }
 
         .btn-logout:hover {
-            background: rgba(239,68,68,0.4);
+            background: rgba(239,68,68,0.2);
+            color: #f87171;
         }
 
+    /* ── Page Layout ── */
     .page-layout {
         display: flex;
-        margin-top: 60px;
-        min-height: calc(100vh - 60px);
+        margin-top: var(--navbar-height);
+        min-height: calc(100vh - var(--navbar-height));
     }
 
-    /* Sidebar */
+    /* ── Sidebar ── */
     .sidebar {
         position: fixed;
-        top: 60px;
+        top: var(--navbar-height);
         left: 0;
         bottom: 0;
         width: var(--sidebar-collapsed-width);
-        background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%);
-        transition: width 0.2s ease;
+        background: var(--sidebar-bg);
+        transition: width 0.18s ease;
         z-index: 900;
         overflow: hidden;
+        border-right: 1px solid rgba(255,255,255,0.05);
     }
 
     .sidebar-expanded {
@@ -285,23 +389,25 @@
     }
 
     .sidebar-content {
-        padding: 0.75rem 0;
+        padding: 0.5rem 0;
         height: 100%;
+        display: flex;
+        flex-direction: column;
     }
 
     .sidebar-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0 0.85rem 0.75rem;
-        color: rgba(255,255,255,0.5);
-        font-size: 0.75rem;
-        font-weight: 600;
+        padding: 0.5rem 0.75rem 0.5rem;
+        color: rgba(255,255,255,0.3);
+        font-size: 0.68rem;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
-        border-bottom: 1px solid rgba(255,255,255,0.1);
-        margin-bottom: 0.5rem;
-        min-height: 20px;
+        letter-spacing: 0.08em;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        margin-bottom: 0.25rem;
+        min-height: 28px;
     }
 
     .sidebar-header-label {
@@ -312,70 +418,146 @@
         background: none;
         border: none;
         cursor: pointer;
-        font-size: 0.9rem;
-        opacity: 0.4;
+        opacity: 0.35;
         transition: opacity 0.2s, transform 0.2s;
         padding: 0;
         flex-shrink: 0;
         margin-left: auto;
+        color: white;
+        display: flex;
+        align-items: center;
     }
 
         .pin-btn:hover {
-            opacity: 0.8;
+            opacity: 0.7;
         }
 
         .pin-btn.pinned {
-            opacity: 1;
+            opacity: 0.9;
             transform: rotate(-45deg);
         }
 
     .sidebar-nav {
         display: flex;
         flex-direction: column;
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-top: 0.25rem;
     }
 
     .nav-item {
         display: flex;
         align-items: center;
-        gap: 0.85rem;
-        padding: 0.7rem 0.85rem;
-        color: rgba(255,255,255,0.7);
+        gap: 0.75rem;
+        padding: 0.55rem 0.75rem;
+        color: var(--nav-text);
         text-decoration: none;
-        font-size: 0.9rem;
-        transition: all 0.15s;
-        border-left: 3px solid transparent;
+        font-size: 0.82rem;
+        font-weight: 500;
+        transition: all 0.12s;
+        border-left: 2px solid transparent;
         white-space: nowrap;
+        cursor: pointer;
     }
 
+        .nav-item:hover {
+            background: var(--sidebar-hover);
+            color: var(--nav-text-active);
+        }
+
+        .nav-item.active {
+            background: var(--sidebar-active);
+            color: var(--nav-text-active);
+            border-left-color: var(--sidebar-active-border);
+        }
+
     .nav-icon {
-        font-size: 1.1rem;
+        font-size: 1rem;
         flex-shrink: 0;
-        width: 22px;
+        width: 20px;
         text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .nav-label {
         flex: 1;
     }
 
-    .nav-item:hover {
-        background: rgba(255,255,255,0.08);
-        color: white;
+    /* Nav Group */
+    .nav-group {
+        display: flex;
+        flex-direction: column;
     }
 
-    .nav-item.active {
-        background: rgba(255,255,255,0.12);
-        color: white;
-        border-left-color: #a78bfa;
+    .nav-group-toggle {
+        width: 100%;
+        background: none;
+        border: none;
+        cursor: pointer;
+        text-align: left;
+        font-family: inherit;
+        font-size: 0.82rem;
     }
 
-    /* Main Content */
+    .nav-chevron {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        color: rgba(255,255,255,0.3);
+        transition: transform 0.2s;
+        flex-shrink: 0;
+    }
+
+    .chevron-open {
+        transform: rotate(90deg);
+        color: rgba(255,255,255,0.7);
+    }
+
+    .nav-sub {
+        display: flex;
+        flex-direction: column;
+        background: rgba(0,0,0,0.2);
+        border-left: 2px solid rgba(99,102,241,0.3);
+        margin-left: 0.9rem;
+    }
+
+    .nav-sub-item {
+        padding: 0.45rem 0.75rem !important;
+        font-size: 0.79rem !important;
+        gap: 0.5rem !important;
+        border-left: none !important;
+    }
+
+        .nav-sub-item.active {
+            background: rgba(255,255,255,0.08) !important;
+            color: white !important;
+        }
+
+    .nav-sub-arrow {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+        color: rgba(255,255,255,0.35);
+    }
+
+    .nav-sub-item:hover .nav-sub-arrow, .nav-sub-item.active .nav-sub-arrow {
+        color: rgba(255,255,255,0.8);
+    }
+
+    .nav-icon svg, .nav-chevron svg, .nav-sub-arrow svg {
+        display: block;
+    }
+
+    /* ── Main Content ── */
     .main-content {
         flex: 1;
-        padding: 1.75rem;
-        transition: margin-left 0.2s ease;
+        padding: 1.25rem 1.5rem;
+        transition: margin-left 0.18s ease;
         min-width: 0;
-        background: #f8f7ff;
+        background: var(--content-bg);
     }
 
     .content-shifted {
@@ -392,10 +574,15 @@
     [Parameter] public RenderFragment? TopBarContent { get; set; }
 
     string apiBase = "http://localhost:5027";
+    bool configGroupOpen = false;
+
+    void ToggleConfigGroup() => configGroupOpen = !configGroupOpen;
 
     protected override async Task OnInitializedAsync()
     {
         await AssetService.LoadAssetsAsync();
+        // Auto-open config group if already on a config page
+        configGroupOpen = Navigation.Uri.Contains("/config", StringComparison.OrdinalIgnoreCase);
     }
 
     protected override void OnInitialized()
@@ -408,7 +595,12 @@
 
     void OnStateChanged() => InvokeAsync(StateHasChanged);
     void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
-        => InvokeAsync(StateHasChanged);
+    {
+        // Keep config group open when navigating between config pages
+        if (Navigation.Uri.Contains("/config", StringComparison.OrdinalIgnoreCase))
+            configGroupOpen = true;
+        InvokeAsync(StateHasChanged);
+    }
 
     bool IsActive(string path)
     {

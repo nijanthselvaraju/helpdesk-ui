@@ -8,30 +8,7 @@
 @using TicketingSystem.UI.Services
 
 <AppShell>
-    <TopBarContent>
-        <input type="text"
-               class="filter-input"
-               placeholder="🔍 Search tickets..."
-               value="@search"
-               @oninput="e => search = e.Value?.ToString() ?? string.Empty" />
-
-        <select class="filter-select" @bind="status">
-            <option value="">All Status</option>
-            <option value="Open">Open</option>
-            <option value="InProgress">In Progress</option>
-            <option value="Closed">Closed</option>
-        </select>
-
-        <select class="filter-select" @bind="priority">
-            <option value="">All Priority</option>
-            <option value="Low">Low</option>
-            <option value="Medium">Medium</option>
-            <option value="High">High</option>
-        </select>
-
-        <button class="btn-filter" @onclick="ApplyFilters">Search</button>
-        <button class="btn-filter-clear" @onclick="ClearFilters">Clear</button>
-    </TopBarContent>
+    <TopBarContent></TopBarContent>
 
     <ChildContent>
         <div class="content-header">
@@ -44,6 +21,143 @@
                 <a href="/tickets/create" class="btn-create">
                     <i class="bi bi-plus-lg"></i> Create New Ticket
                 </a>
+            }
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+            <div class="filter-search">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.35-4.35" />
+                </svg>
+                <input class="filter-input-inline" placeholder="Search by ticket no. or title..."
+                       @bind="search" @bind:event="oninput" @bind:after="ApplyFilters" />
+            </div>
+            <select class="filter-select-inline" @bind="status" @bind:after="ApplyFilters">
+                <option value="">All Status</option>
+                <option value="Open">Open</option>
+                <option value="InProgress">In Progress</option>
+                <option value="Closed">Closed</option>
+            </select>
+            <select class="filter-select-inline" @bind="priority" @bind:after="ApplyFilters">
+                <option value="">All Priority</option>
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+            </select>
+            <div class="filter-date-group" style="position:relative;">
+                <div class="date-range-input" @onclick="ToggleDatePicker">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#9ca3af;flex-shrink:0;">
+                        <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+                        <line x1="16" x2="16" y1="2" y2="6" />
+                        <line x1="8" x2="8" y1="2" y2="6" />
+                        <line x1="3" x2="21" y1="10" y2="10" />
+                    </svg>
+                    @if (dateFrom.HasValue && dateTo.HasValue)
+                    {
+                        <span class="date-range-text">@dateFrom.Value.ToString("dd/MM/yyyy") to @dateTo.Value.ToString("dd/MM/yyyy")</span>
+                        <button class="date-clear-btn" @onclick:stopPropagation="true" @onclick='() => ApplyPreset("clear")'>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                        </button>
+                    }
+                    else if (dateFrom.HasValue)
+                    {
+                        <span class="date-range-text">From @dateFrom.Value.ToString("dd/MM/yyyy")</span>
+                    }
+                    else
+                    {
+                        <span class="date-placeholder">Date Range</span>
+                    }
+                </div>
+
+                @if (showDatePicker)
+                {
+                    <div class="date-picker-overlay" @onclick="CloseDatePicker"></div>
+                    <div class="date-picker-panel" @onclick:stopPropagation="true">
+                        <!-- Quick presets -->
+                        <div class="date-presets">
+                            <button class="preset-btn" @onclick='() => ApplyPreset("today")'>Today</button>
+                            <button class="preset-btn" @onclick='() => ApplyPreset("yesterday")'>Yesterday</button>
+                            <button class="preset-btn" @onclick='() => ApplyPreset("thismonth")'>This Month</button>
+                            <button class="preset-btn" @onclick='() => ApplyPreset("last30")'>Last 30 days</button>
+                            <button class="preset-btn preset-clear" @onclick='() => ApplyPreset("clear")'>Clear</button>
+                        </div>
+
+                        <!-- Dual calendars -->
+                        <div class="dual-calendars">
+                            <!-- Left calendar -->
+                            <div class="calendar">
+                                <div class="cal-header">
+                                    <button class="cal-nav" @onclick="() => ShiftLeft(-12)">&#171;</button>
+                                    <button class="cal-nav" @onclick="() => ShiftLeft(-1)">&#8249;</button>
+                                    <span class="cal-title">@leftMonth.ToString("MMMM yyyy")</span>
+                                    <button class="cal-nav" @onclick="() => ShiftLeft(1)">&#8250;</button>
+                                    <button class="cal-nav" @onclick="() => ShiftLeft(12)">&#187;</button>
+                                </div>
+                                <div class="cal-grid">
+                                    @foreach (var d in new[] { "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" })
+                                    {
+                                        <span class="cal-dow">@d</span>
+                                    }
+                                    @foreach (var day in GetCalendarDays(leftMonth))
+                                    {
+                                        <button class="cal-day @GetDayClass(day)"
+                                                disabled="@(day == null)"
+                                                @onclick="() => SelectDay(day!.Value)">
+                                            @(day?.Day.ToString() ?? "")
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Right calendar -->
+                            <div class="calendar">
+                                <div class="cal-header">
+                                    <button class="cal-nav" @onclick="() => ShiftRight(-12)">&#171;</button>
+                                    <button class="cal-nav" @onclick="() => ShiftRight(-1)">&#8249;</button>
+                                    <span class="cal-title">@rightMonth.ToString("MMMM yyyy")</span>
+                                    <button class="cal-nav" @onclick="() => ShiftRight(1)">&#8250;</button>
+                                    <button class="cal-nav" @onclick="() => ShiftRight(12)">&#187;</button>
+                                </div>
+                                <div class="cal-grid">
+                                    @foreach (var d in new[] { "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" })
+                                    {
+                                        <span class="cal-dow">@d</span>
+                                    }
+                                    @foreach (var day in GetCalendarDays(rightMonth))
+                                    {
+                                        <button class="cal-day @GetDayClass(day)"
+                                                disabled="@(day == null)"
+                                                @onclick="() => SelectDay(day!.Value)">
+                                            @(day?.Day.ToString() ?? "")
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Footer -->
+                        <div class="date-picker-footer">
+                            <span class="date-range-display">
+                                @if (dateFrom.HasValue && dateTo.HasValue)
+                                {
+                                    @($"{dateFrom.Value:dd/MM/yyyy} — {dateTo.Value:dd/MM/yyyy}")
+                                }
+                                else if (dateFrom.HasValue)
+                                {
+
+                                    @($"{dateFrom.Value:dd/MM/yyyy} — ...")
+                                }
+                            </span>
+                            <button class="btn-done" @onclick="DoneDatePicker">Done</button>
+                        </div>
+                    </div>
+                }
+            </div>
+            @if (!string.IsNullOrEmpty(search) || !string.IsNullOrEmpty(status) || !string.IsNullOrEmpty(priority) || dateFrom.HasValue || dateTo.HasValue)
+            {
+                <button class="btn-clear-filter" @onclick="ClearFilters">&#x2715; Clear</button>
             }
         </div>
 
@@ -84,32 +198,17 @@
                     {
                         <div class="table-row" @ondblclick="() => ViewTicket(t.Id)" title="Double-click to open">
                             <div class="col-id">#@t.Id</div>
-                            <div class="col-title">
-                                <small>@t.Title</small>
-                            </div>
+                            <div class="col-title">@t.Title</div>
                             <div class="col-status">
-                                <span class="status-badge status-@t.Status.ToLower()">
-                                    @FormatStatus(t.Status)
-                                </span>
+                                <span class="status-badge status-@t.Status.ToLower()">@FormatStatus(t.Status)</span>
                             </div>
                             <div class="col-priority">
-                                <span class="priority-badge priority-@t.Priority.ToLower()">
-                                    @t.Priority
-                                </span>
+                                <span class="priority-badge priority-@t.Priority.ToLower()">@t.Priority</span>
                             </div>
-                            <div class="col-category">
-                                <small>@(t.CategoryName ?? "—")</small>
-                            </div>
-                            <div class="col-requester">
-                                <small>@(t.CreatedByName ?? "—")</small>
-                            </div>
-                            <div class="col-technician">
-                                <small>@(t.AssignedToName ?? "—")</small>
-                            </div>
-                            <div class="col-created">
-                                <small>@t.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy")</small>
-                            </div>
-
+                            <div class="col-category"><small>@(t.CategoryName ?? "—")</small></div>
+                            <div class="col-requester"><small>@(t.CreatedByName ?? "—")</small></div>
+                            <div class="col-technician"><small>@(t.AssignedToName ?? "—")</small></div>
+                            <div class="col-created"><small>@t.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy")</small></div>
                             <div class="col-closed">
                                 @if (t.Status == "Closed" && t.UpdatedAt != null)
                                 {
@@ -132,56 +231,52 @@
                                     <small class="text-muted">—</small>
                                 }
                             </div>
-
-                            <div class="col-actions">
-                                <div class="dropdown-wrapper">
-                                    <button class="btn-dots">⋮</button>
-
-                                    <div class="dropdown-menu">
-                                        <button class="dropdown-item" @onclick="() => ViewTicket(t.Id)">
-                                            👁️ View
-                                        </button>
-
-                                        @if (AuthService.HasPermission("CanEditTicket") && t.Status != "Closed")
-                                        {
-                                            <button class="dropdown-item" @onclick="() => OpenEditModal(t)">
-                                                ✏️ Edit
-                                            </button>
-                                        }
-
-                                        @if (AuthService.HasPermission("CanCloseTicket") && t.Status != "Closed")
-                                        {
-                                            <button class="dropdown-item" @onclick="() => CloseTicketFromList(t.Id)">
-                                                🔒 Close Ticket
-                                            </button>
-                                        }
-
-                                        @if (AuthService.HasPermission("CanReopenTicket") && t.Status == "Closed")
-                                        {
-                                            <button class="dropdown-item" @onclick="() => ReopenTicketFromList(t.Id)">
-                                                🔓 Reopen Ticket
-                                            </button>
-                                        }
-
-                                        @if (AuthService.HasPermission("CanDeleteTicket"))
-                                        {
-                                            <div class="dropdown-divider"></div>
-
-                                            <button class="dropdown-item dropdown-item-danger"
-                                                    @onclick="() => DeleteTicket(t.Id)">
-                                                🗑️ Delete
-                                            </button>
-                                        }
-                                    </div>
-                                </div>
+                            <div class="col-actions" @onclick:stopPropagation="true">
+                                <button class="btn-dots" @onclick="@(() => ToggleDropdown(t.Id))">⋮</button>
                             </div>
-
-
-                            
                         </div>
                     }
                 </div>
             </div>
+
+            @* Dropdown rendered OUTSIDE the scrollable table to avoid clipping *@
+            @if (openDropdownId > 0)
+            {
+                <div class="dropdown-overlay" @onclick="CloseDropdown"></div>
+                <div class="floating-dropdown" style="top: @(dropdownTop)px; right: @(dropdownRight)px;">
+                    <button class="dropdown-item" @onclick="@(() => { ViewTicket(openDropdownId); CloseDropdown(); })">
+                        👁️ View
+                    </button>
+                    @{
+                        var dt = tickets.FirstOrDefault(x => x.Id == openDropdownId);
+                    }
+                    @if (dt != null && AuthService.HasPermission("CanEditTicket") && dt.Status != "Closed")
+                    {
+                        <button class="dropdown-item" @onclick="@(() => { OpenEditModal(dt); CloseDropdown(); })">
+                            ✏️ Edit
+                        </button>
+                    }
+                    @if (dt != null && AuthService.HasPermission("CanCloseTicket") && dt.Status != "Closed")
+                    {
+                        <button class="dropdown-item" @onclick="@(() => { CloseTicketFromList(openDropdownId); CloseDropdown(); })">
+                            🔒 Close Ticket
+                        </button>
+                    }
+                    @if (dt != null && AuthService.HasPermission("CanReopenTicket") && dt.Status == "Closed")
+                    {
+                        <button class="dropdown-item" @onclick="@(() => { ReopenTicketFromList(openDropdownId); CloseDropdown(); })">
+                            🔓 Reopen Ticket
+                        </button>
+                    }
+                    @if (AuthService.HasPermission("CanDeleteTicket"))
+                    {
+                        <div class="dropdown-divider"></div>
+                        <button class="dropdown-item dropdown-item-danger" @onclick="@(() => { DeleteTicket(openDropdownId); CloseDropdown(); })">
+                            🗑️ Delete
+                        </button>
+                    }
+                </div>
+            }
 
             <div class="pagination-bar">
                 <button class="page-btn" @onclick="PreviousPage" disabled="@IsFirstPage">← Prev</button>
@@ -192,7 +287,6 @@
     </ChildContent>
 </AppShell>
 
-@* Edit Modal (kept — create moved to /tickets/create page) *@
 @if (showModal)
 {
     <div class="modal-backdrop" @onclick="CloseModal">
@@ -210,8 +304,7 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Description <span class="text-danger">*</span></label>
-                    <textarea class="form-control" rows="4" placeholder="Describe the issue"
-                              @bind="editTicket.Description"></textarea>
+                    <textarea class="form-control" rows="4" @bind="editTicket.Description"></textarea>
                 </div>
                 <div class="row">
                     <div class="col-md-6 mb-3">
@@ -246,71 +339,356 @@
 }
 
 <style>
-    .filter-input {
+    /* Filter Bar */
+    .filter-bar {
+        display: flex;
+        gap: 0.6rem;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+        background: white;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .filter-search {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 0.35rem 0.75rem;
+        background: white;
         flex: 1;
-        max-width: 260px;
-        padding: 0.45rem 0.85rem;
-        border-radius: 8px;
-        border: 1.5px solid rgba(255,255,255,0.2);
-        background: rgba(255,255,255,0.1);
-        color: white;
-        font-size: 0.875rem;
-        outline: none;
+        min-width: 220px;
+        transition: border-color 0.15s;
     }
 
-        .filter-input::placeholder {
-            color: rgba(255,255,255,0.5);
+        .filter-search:focus-within {
+            border-color: #6366f1;
         }
 
-        .filter-input:focus {
-            border-color: rgba(255,255,255,0.5);
+        .filter-search svg {
+            color: #9ca3af;
+            flex-shrink: 0;
         }
 
-    .filter-select {
-        padding: 0.45rem 0.75rem;
-        border-radius: 8px;
-        border: 1.5px solid rgba(255,255,255,0.2);
-        background: rgba(255,255,255,0.1);
-        color: white;
-        font-size: 0.875rem;
+    .filter-input-inline {
+        border: none;
         outline: none;
+        font-size: 0.875rem;
+        color: #374151;
+        background: transparent;
+        width: 100%;
+    }
+
+    .filter-select-inline {
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.875rem;
+        color: #374151;
+        background: white;
         cursor: pointer;
+        outline: none;
+        transition: border-color 0.15s;
     }
 
-        .filter-select option {
-            background: #312e81;
-            color: white;
+        .filter-select-inline:focus {
+            border-color: #6366f1;
         }
 
-    .btn-filter {
-        padding: 0.45rem 1rem;
-        background: #7c3aed;
+    .filter-date-group {
+        position: relative;
+    }
+
+    /* Input-style date range trigger — matches Image 1 */
+    .date-range-input {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 0.4rem 0.85rem;
+        font-size: 0.875rem;
+        color: #374151;
+        background: white;
+        cursor: pointer;
+        outline: none;
+        transition: border-color 0.15s;
+        white-space: nowrap;
+        min-width: 180px;
+        user-select: none;
+    }
+
+        .date-range-input:hover {
+            border-color: #6366f1;
+        }
+
+    .date-range-text {
+        flex: 1;
+        font-size: 0.875rem;
+        color: #374151;
+    }
+
+    .date-placeholder {
+        flex: 1;
+        color: #9ca3af;
+        font-size: 0.875rem;
+    }
+
+    .date-clear-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+        color: #9ca3af;
+        display: flex;
+        align-items: center;
+        border-radius: 4px;
+        transition: color 0.15s;
+    }
+
+        .date-clear-btn:hover {
+            color: #dc2626;
+        }
+
+    .date-picker-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+    }
+
+    .date-picker-panel {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+        z-index: 1001;
+        padding: 1.25rem;
+        min-width: 640px;
+    }
+
+    /* Presets — Image 1 style: bordered pills, Clear = plain red text */
+    .date-presets {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.85rem;
+        border-bottom: 1px solid #f3f4f6;
+        align-items: center;
+    }
+
+    .preset-btn {
+        padding: 0.3rem 0.85rem;
+        border: 1.5px solid #d1d5db;
+        border-radius: 20px;
+        background: white;
+        font-size: 0.82rem;
+        font-weight: 500;
+        color: #374151;
+        cursor: pointer;
+        transition: all 0.15s;
+        font-family: inherit;
+    }
+
+        .preset-btn:hover {
+            border-color: #6366f1;
+            color: #6366f1;
+            background: #f5f3ff;
+        }
+
+    /* Clear = plain red text, no border */
+    .preset-clear {
+        border: none;
+        background: none;
+        color: #ef4444;
+        font-weight: 600;
+        padding: 0.3rem 0.5rem;
+    }
+
+        .preset-clear:hover {
+            color: #b91c1c;
+            background: none;
+            border: none;
+        }
+
+    /* Dual calendars */
+    .dual-calendars {
+        display: flex;
+        gap: 2rem;
+    }
+
+    .calendar {
+        flex: 1;
+        min-width: 260px;
+    }
+
+    .cal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+    }
+
+    .cal-title {
+        font-weight: 700;
+        font-size: 1rem;
+        color: #111827;
+        flex: 1;
+        text-align: center;
+    }
+
+    .cal-nav {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #6b7280;
+        font-size: 1.1rem;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.12s;
+        padding: 0;
+        line-height: 1;
+    }
+
+        .cal-nav:hover {
+            background: #f3f4f6;
+            color: #111827;
+        }
+
+    .cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 3px;
+    }
+
+    .cal-dow {
+        text-align: center;
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #9ca3af;
+        padding: 0.3rem 0;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .cal-day {
+        width: 100%;
+        aspect-ratio: 1;
+        border: none;
+        border-radius: 50%;
+        background: none;
+        cursor: pointer;
+        font-size: 0.875rem;
+        color: #111827;
+        transition: all 0.12s;
+        font-family: inherit;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 400;
+    }
+
+        .cal-day:hover:not(:disabled):not(.day-start):not(.day-end) {
+            background: #e0e7ff;
+            color: #4338ca;
+        }
+
+        .cal-day:disabled {
+            cursor: default;
+            color: transparent;
+            background: none;
+        }
+
+        .cal-day.day-in-range {
+            background: #e0e7ff;
+            color: #3730a3;
+            border-radius: 0;
+        }
+
+        .cal-day.day-start {
+            background: #4338ca !important;
+            color: white !important;
+            border-radius: 50% !important;
+            font-weight: 700;
+        }
+
+        .cal-day.day-end {
+            background: #4338ca !important;
+            color: white !important;
+            border-radius: 50% !important;
+            font-weight: 700;
+        }
+
+        .cal-day.day-today {
+            font-weight: 700;
+            color: #4338ca;
+            outline: 2px solid #4338ca;
+            outline-offset: -2px;
+            border-radius: 50%;
+        }
+
+        .cal-day.day-other-month {
+            color: #d1d5db;
+        }
+
+    .date-picker-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 1rem;
+        padding-top: 0.85rem;
+        border-top: 1px solid #f3f4f6;
+    }
+
+    .date-range-display {
+        font-size: 0.875rem;
+        color: #6b7280;
+        font-weight: 500;
+        font-family: inherit;
+    }
+
+    .btn-done {
+        background: #4338ca;
         color: white;
         border: none;
+        padding: 0.5rem 1.5rem;
         border-radius: 8px;
         font-size: 0.875rem;
+        font-weight: 600;
         cursor: pointer;
-        white-space: nowrap;
+        transition: background 0.15s;
+        font-family: inherit;
+        letter-spacing: 0.01em;
     }
 
-        .btn-filter:hover {
-            opacity: 0.85;
+        .btn-done:hover {
+            background: #3730a3;
         }
 
-    .btn-filter-clear {
-        padding: 0.45rem 0.85rem;
-        background: transparent;
-        color: rgba(255,255,255,0.7);
-        border: 1.5px solid rgba(255,255,255,0.2);
+    .btn-clear-filter {
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1.5px solid #fecaca;
         border-radius: 8px;
-        font-size: 0.875rem;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.82rem;
+        font-weight: 600;
         cursor: pointer;
         white-space: nowrap;
     }
 
-        .btn-filter-clear:hover {
-            background: rgba(255,255,255,0.1);
-            color: white;
+        .btn-clear-filter:hover {
+            background: #fecaca;
         }
 
     .content-header {
@@ -367,10 +745,10 @@
         margin-bottom: 1rem;
     }
 
+    /* TABLE */
     .tickets-table-wrapper {
         width: 100%;
         overflow-x: auto;
-        overflow-y: visible;
         background: white;
         border-radius: 12px;
         box-shadow: 0 1px 4px rgba(0,0,0,0.08);
@@ -395,17 +773,19 @@
             }
 
     .tickets-table {
-        background: white;
-        border-radius: 12px;
-        min-width: 1400px;
+        min-width: 1200px;
+    }
+
+    .table-header, .table-row {
+        display: grid;
+        grid-template-columns: 55px 220px 95px 90px 130px 120px 120px 105px 105px 60px 55px;
+        padding: 0.75rem 1.25rem;
+        align-items: center;
     }
 
     .table-header {
-        display: grid;
-        grid-template-columns: 60px 200px 100px 90px 120px 120px 120px 110px 110px 60px 100px;
-        padding: 0.75rem 1.25rem;
         background: #f8f7ff;
-        font-size: 0.78rem;
+        font-size: 0.75rem;
         font-weight: 700;
         color: #6b7280;
         text-transform: uppercase;
@@ -414,11 +794,7 @@
     }
 
     .table-row {
-        display: grid;
-        grid-template-columns: 60px 200px 100px 90px 120px 120px 120px 110px 110px 60px 100px;
-        padding: 0.9rem 1.25rem;
         border-bottom: 1px solid #f3f4f6;
-        align-items: center;
         transition: background 0.15s;
         cursor: pointer;
     }
@@ -437,13 +813,18 @@
         font-weight: 600;
     }
 
+    .col-title {
+        font-size: 0.875rem;
+        color: #1f2937;
+        padding-right: 0.5rem;
+    }
+
     .status-badge, .priority-badge {
         display: inline-flex;
         align-items: center;
-        gap: 0.3rem;
-        padding: 0.3rem 0.7rem;
+        padding: 0.28rem 0.65rem;
         border-radius: 20px;
-        font-size: 0.78rem;
+        font-size: 0.75rem;
         font-weight: 600;
     }
 
@@ -486,21 +867,17 @@
         font-size: 0.78rem;
     }
 
+    /* ACTIONS */
     .col-actions {
         display: flex;
         justify-content: center;
         align-items: center;
     }
 
-    .dropdown-wrapper {
-        position: relative;
-        display: inline-block;
-    }
-
     .btn-dots {
         background: none;
         border: none;
-        font-size: 1.2rem;
+        font-size: 1.3rem;
         font-weight: 700;
         color: #6b7280;
         cursor: pointer;
@@ -511,7 +888,6 @@
         align-items: center;
         justify-content: center;
         transition: all 0.15s;
-        line-height: 1;
     }
 
         .btn-dots:hover {
@@ -519,23 +895,22 @@
             color: #374151;
         }
 
-    .dropdown-menu {
-        position: absolute;
-        right: 0;
-        bottom: 35px; /* open above the dots */
-        top: auto;
+    /* FLOATING DROPDOWN - rendered outside table, no clipping */
+    .dropdown-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 998;
+    }
+
+    .floating-dropdown {
+        position: fixed;
         background: white;
         border: 1px solid #e5e7eb;
         border-radius: 10px;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-        min-width: 170px;
-        z-index: 9999;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        min-width: 175px;
+        z-index: 999;
         padding: 0.35rem 0;
-        display: none;
-    }
-
-    .dropdown-wrapper:hover .dropdown-menu {
-        display: block;
     }
 
     .dropdown-item {
@@ -573,6 +948,7 @@
         margin: 0.25rem 0;
     }
 
+    /* PAGINATION */
     .pagination-bar {
         display: flex;
         align-items: center;
@@ -606,6 +982,7 @@
         color: #6b7280;
     }
 
+    /* MODAL */
     .modal-backdrop {
         position: fixed;
         inset: 0;
@@ -698,11 +1075,90 @@
 
 @code {
     string search = "", status = "", priority = "";
+    DateTime? dateFrom = null, dateTo = null;
+
+    // Date picker state
+    bool showDatePicker = false;
+    DateTime leftMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    DateTime rightMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1);
+    bool pickingStart = true; // first click = start, second = end
+
+    void ToggleDatePicker() => showDatePicker = !showDatePicker;
+    void CloseDatePicker() => showDatePicker = false;
+
+    async Task DoneDatePicker()
+    {
+        showDatePicker = false;
+        pageNumber = 1;
+        await LoadTickets();
+    }
+
+    void ShiftLeft(int months)
+    {
+        leftMonth = leftMonth.AddMonths(months);
+        if (leftMonth >= rightMonth) rightMonth = leftMonth.AddMonths(1);
+    }
+
+    void ShiftRight(int months)
+    {
+        rightMonth = rightMonth.AddMonths(months);
+        if (rightMonth <= leftMonth) leftMonth = rightMonth.AddMonths(-1);
+    }
+
+    void SelectDay(DateTime day)
+    {
+        if (pickingStart)
+        {
+            dateFrom = day; dateTo = null; pickingStart = false;
+        }
+        else
+        {
+            if (day < dateFrom) { dateTo = dateFrom; dateFrom = day; }
+            else dateTo = day;
+            pickingStart = true;
+        }
+    }
+
+    void ApplyPreset(string preset)
+    {
+        var today = DateTime.Today;
+        switch (preset)
+        {
+            case "today": dateFrom = today; dateTo = today; break;
+            case "yesterday": dateFrom = today.AddDays(-1); dateTo = today.AddDays(-1); break;
+            case "thismonth": dateFrom = new DateTime(today.Year, today.Month, 1); dateTo = today; break;
+            case "last30": dateFrom = today.AddDays(-29); dateTo = today; break;
+            case "clear": dateFrom = null; dateTo = null; break;
+        }
+        pickingStart = true;
+    }
+
+    List<DateTime?> GetCalendarDays(DateTime month)
+    {
+        var days = new List<DateTime?>();
+        var first = new DateTime(month.Year, month.Month, 1);
+        int startDow = (int)first.DayOfWeek;
+        for (int i = 0; i < startDow; i++) days.Add(null);
+        int daysInMonth = DateTime.DaysInMonth(month.Year, month.Month);
+        for (int d = 1; d <= daysInMonth; d++) days.Add(new DateTime(month.Year, month.Month, d));
+        return days;
+    }
+
+    string GetDayClass(DateTime? day)
+    {
+        if (day == null) return "";
+        var classes = new List<string>();
+        if (day.Value.Date == DateTime.Today) classes.Add("day-today");
+        if (dateFrom.HasValue && day.Value.Date == dateFrom.Value.Date) classes.Add("day-start");
+        else if (dateTo.HasValue && day.Value.Date == dateTo.Value.Date) classes.Add("day-end");
+        else if (dateFrom.HasValue && dateTo.HasValue && day.Value.Date > dateFrom.Value.Date && day.Value.Date < dateTo.Value.Date) classes.Add("day-in-range");
+        return string.Join(" ", classes);
+    }
     int pageNumber = 1, pageSize = 10, totalItems = 0;
-    bool isLoading = false, showModal = false;
-    
-    bool showToast = false;
+    bool isLoading = false, showModal = false, showToast = false;
     string toastMessage = "", toastType = "";
+    int openDropdownId = -1;
+    double dropdownTop = 0, dropdownRight = 0;
 
     Ticket editTicket = new() { Status = "Open", Priority = "Low" };
     List<Ticket> tickets = new();
@@ -714,106 +1170,94 @@
     protected override async Task OnInitializedAsync()
     {
         await AuthService.InitializeAsync();
-        if (!AuthService.IsAuthenticated)
-        {
-            Navigation.NavigateTo("/login");
-            return;
-        }
+        if (!AuthService.IsAuthenticated) { Navigation.NavigateTo("/login"); return; }
         await LoadTickets();
     }
 
     async Task ApplyFilters() { pageNumber = 1; await LoadTickets(); }
 
-    void ClearFilters()
+    async Task ClearFilters()
     {
-        search = ""; status = ""; priority = ""; pageNumber = 1;
-        _ = LoadTickets();
+        search = ""; status = ""; priority = "";
+        dateFrom = null; dateTo = null;
+        pageNumber = 1;
+        await LoadTickets();
     }
 
     void ViewTicket(int id) => Navigation.NavigateTo($"/tickets/{id}");
 
+    async Task ToggleDropdown(int id)
+    {
+        if (openDropdownId == id) { CloseDropdown(); return; }
+        openDropdownId = id;
+        // Position dropdown near top-right of viewport
+        var rect = await JSRuntime.InvokeAsync<BoundingRect>("eval",
+            $"(function(){{var el=document.querySelectorAll('.btn-dots')[{tickets.FindIndex(t => t.Id == id)}]; var r=el.getBoundingClientRect(); return {{top:r.bottom,right:window.innerWidth-r.right}};}})()");
+        dropdownTop = rect.Top;
+        dropdownRight = rect.Right;
+        StateHasChanged();
+    }
+
+    void CloseDropdown() { openDropdownId = -1; StateHasChanged(); }
+
     void OpenEditModal(Ticket ticket)
     {
-        if (!AuthService.HasPermission("CanEditTicket"))
-        { ShowToast("No permission to edit tickets", "error"); return; }
-
-        editTicket = new Ticket
-        {
-            Id = ticket.Id,
-            Title = ticket.Title,
-            Description = ticket.Description,
-            Status = ticket.Status,
-            Priority = ticket.Priority
-        };
+        if (!AuthService.HasPermission("CanEditTicket")) { ShowToast("No permission to edit tickets", "error"); return; }
+        editTicket = new Ticket { Id = ticket.Id, Title = ticket.Title, Description = ticket.Description, Status = ticket.Status, Priority = ticket.Priority };
         showModal = true;
     }
 
-    void CloseModal()
-    {
-        showModal = false;
-        editTicket = new Ticket { Status = "Open", Priority = "Low" };
-    }
+    void CloseModal() { showModal = false; editTicket = new Ticket { Status = "Open", Priority = "Low" }; }
 
     async Task SaveEditTicket()
     {
         if (string.IsNullOrWhiteSpace(editTicket.Title) || string.IsNullOrWhiteSpace(editTicket.Description))
         { ShowToast("Please fill in all required fields", "error"); return; }
-
         var client = Http.CreateClient("API");
         var response = await client.PutAsJsonAsync($"api/ticket/{editTicket.Id}", editTicket);
-
-        if (response.IsSuccessStatusCode)
-        {
-            ShowToast("Ticket updated ✏️", "success");
-            CloseModal(); await LoadTickets();
-        }
-        else
-        {
-            var body = await response.Content.ReadAsStringAsync();
-            string msg = "Failed to update ticket";
-            try { msg = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? msg; }
-            catch { }
-            ShowToast(msg, "error");
-        }
+        if (response.IsSuccessStatusCode) { ShowToast("Ticket updated ✏️", "success"); CloseModal(); await LoadTickets(); }
+        else { var body = await response.Content.ReadAsStringAsync(); string msg = "Failed to update ticket"; try { msg = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? msg; } catch { } ShowToast(msg, "error"); }
     }
 
     async Task LoadTickets()
     {
         isLoading = true; StateHasChanged();
-        var client = Http.CreateClient("API");
-
-        bool canViewAll = AuthService.HasPermission("CanViewAllTickets");
-        var url = $"api/ticket?search={search}&status={status}&priority={priority}&page={pageNumber}&pageSize={pageSize}";
-
-        if (canViewAll)
-            url += "&viewAll=true";
-        else
-            url += $"&currentUserId={AuthService.CurrentUser.Id}&viewAll=false";
-
-        var result = await client.GetFromJsonAsync<TicketResponse>(url);
-        tickets = result?.Data ?? new();
-        totalItems = result?.TotalItems ?? 0;
-        isLoading = false;
+        try
+        {
+            var client = Http.CreateClient("API");
+            bool canViewAll = AuthService.HasPermission("CanViewAllTickets");
+            var url = $"api/ticket?search={Uri.EscapeDataString(search)}&status={status}&priority={priority}&page={pageNumber}&pageSize={pageSize}";
+            if (dateFrom.HasValue) url += $"&dateFrom={dateFrom.Value:yyyy-MM-dd}";
+            if (dateTo.HasValue) url += $"&dateTo={dateTo.Value:yyyy-MM-dd}";
+            if (canViewAll) url += "&viewAll=true";
+            else url += $"&currentUserId={AuthService.CurrentUser.Id}&viewAll=false";
+            var result = await client.GetFromJsonAsync<TicketResponse>(url);
+            tickets = result?.Data ?? new();
+            totalItems = result?.TotalItems ?? 0;
+        }
+        catch (Exception ex)
+        {
+            tickets = new();
+            totalItems = 0;
+            ShowToast("Failed to load tickets: " + ex.Message, "error");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
     }
 
     async Task DeleteTicket(int id)
     {
-        if (!AuthService.HasPermission("CanDeleteTicket"))
-        { ShowToast("No permission to delete tickets", "error"); return; }
-
+        if (!AuthService.HasPermission("CanDeleteTicket")) { ShowToast("No permission to delete tickets", "error"); return; }
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Delete this ticket?");
         if (!confirmed) return;
-
         var client = Http.CreateClient("API");
         var response = await client.DeleteAsync($"api/ticket/{id}");
         if (response.IsSuccessStatusCode) { ShowToast("Ticket deleted 🗑️", "success"); await LoadTickets(); }
         else ShowToast("Failed to delete ticket", "error");
     }
-
-    async Task NextPage() { pageNumber++; await LoadTickets(); }
-    async Task PreviousPage() { if (pageNumber > 1) { pageNumber--; await LoadTickets(); } }
-
-    
 
     async Task CloseTicketFromList(int id)
     {
@@ -830,31 +1274,24 @@
     async Task ReopenTicketFromList(int id)
     {
         var client = Http.CreateClient("API");
-        var response = await client.PatchAsJsonAsync($"api/ticket/{id}/reopen", new { IsRequester = false });
+        var content = new StringContent(System.Text.Json.JsonSerializer.Serialize(new { IsRequester = false }), System.Text.Encoding.UTF8, "application/json");
+        var response = await client.PatchAsync($"api/ticket/{id}/reopen", content);
         if (response.IsSuccessStatusCode) { ShowToast("Ticket reopened ✅", "success"); await LoadTickets(); }
         else ShowToast("Failed to reopen ticket", "error");
     }
 
+    async Task NextPage() { pageNumber++; await LoadTickets(); }
+    async Task PreviousPage() { if (pageNumber > 1) { pageNumber--; await LoadTickets(); } }
+
     void ShowToast(string msg, string type)
     {
         toastMessage = msg; toastType = type; showToast = true; StateHasChanged();
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(3000); showToast = false;
-            await InvokeAsync(StateHasChanged);
-        });
+        _ = Task.Run(async () => { await Task.Delay(3000); showToast = false; await InvokeAsync(StateHasChanged); });
     }
 
-    int GetDaysBetween(DateTime created, DateTime closed)
-        => (int)Math.Ceiling((closed - created).TotalDays);
+    int GetDaysBetween(DateTime created, DateTime closed) => (int)Math.Ceiling((closed - created).TotalDays);
 
-    string FormatStatus(string s) => s switch
-    {
-        "Open" => "Open",
-        "InProgress" => "In Progress",
-        "Closed" => "Closed",
-        _ => s
-    };
+    string FormatStatus(string s) => s switch { "Open" => "Open", "InProgress" => "In Progress", "Closed" => "Closed", _ => s };
 
     public class TicketResponse
     {
@@ -862,5 +1299,11 @@
         public int Page { get; set; }
         public int PageSize { get; set; }
         public List<Ticket> Data { get; set; } = new();
+    }
+
+    public class BoundingRect
+    {
+        public double Top { get; set; }
+        public double Right { get; set; }
     }
 }

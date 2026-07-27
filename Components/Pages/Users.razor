@@ -3,107 +3,246 @@
 @inject IHttpClientFactory Http
 @inject AuthService AuthService
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 @using TicketingSystem.UI.Services
 
 <AppShell>
     <ChildContent>
+        <!-- Header -->
         <div class="content-header">
             <div>
                 <h1 class="content-title">Users</h1>
-                <p class="content-subtitle">@users.Count user@(users.Count == 1 ? "" : "s") in the application</p>
+                <p class="content-subtitle">@filteredUsers.Count of @allUsers.Count user@(allUsers.Count == 1 ? "" : "s")</p>
             </div>
-            <button class="btn-create" @onclick="OpenCreateModal">➕ New User</button>
+            <div class="header-actions">
+                <label class="btn-import" title="Import CSV/Excel">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" x2="12" y1="3" y2="15" />
+                    </svg>
+                    Import
+                    <InputFile OnChange="HandleImportFile" accept=".csv" style="display:none" />
+                </label>
+                <button class="btn-create" @onclick="OpenCreateModal">+ New User</button>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filter-bar">
+            <div class="filter-search">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.35-4.35" />
+                </svg>
+                <input class="filter-input" placeholder="Search name, email, code, username..." @bind="filterSearch" @bind:event="oninput" @bind:after="ApplyFilters" />
+            </div>
+            <select class="filter-select" @bind="filterRole" @bind:after="ApplyFilters">
+                <option value="">All Roles</option>
+                <option value="SuperAdmin">SuperAdmin</option>
+                <option value="Admin">Admin</option>
+                <option value="Technician">Technician</option>
+                <option value="User">User</option>
+            </select>
+            <select class="filter-select" @bind="filterEntity" @bind:after="ApplyFilters">
+                <option value="">All Entities</option>
+                @foreach (var ent in entities)
+                {
+                    <option value="@ent.Id">@ent.Name</option>
+                }
+            </select>
+            <select class="filter-select" @bind="filterStatus" @bind:after="ApplyFilters">
+                <option value="">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+            </select>
+            @if (!string.IsNullOrEmpty(filterSearch) || !string.IsNullOrEmpty(filterRole) || !string.IsNullOrEmpty(filterEntity) || !string.IsNullOrEmpty(filterStatus))
+            {
+                <button class="btn-clear-filter" @onclick="ClearFilters">&#x2715; Clear</button>
+            }
         </div>
 
         @if (isLoading)
         {
             <div class="loading-state">Loading users...</div>
         }
+        else if (filteredUsers.Count == 0)
+        {
+            <div class="empty-state">No users found matching your filters.</div>
+        }
         else
         {
-            <div class="user-table">
-                <div class="table-header">
-                    <div>User</div>
-                    <div>Email</div>
-                    <div>Phone</div>
-                    <div>Role</div>
-                    <div>Status</div>
-                    <div>Actions</div>
+            <div class="table-wrapper">
+                <table class="user-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Employee Code</th>
+                            <th>Employee Name</th>
+                            <th>Entity Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Username</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th class="col-actions">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (u, index) in PagedUsers.Select((u, i) => (u, i)))
+                        {
+                            <tr>
+                                <td class="text-muted">@((pageNumber - 1) * pageSize + index + 1)</td>
+                                <td class="text-muted mono">@(string.IsNullOrEmpty(u.EmployeeCode) ? "—" : u.EmployeeCode)</td>
+                                <td>
+                                    <div class="col-user">
+                                        <span class="avatar">@GetInitials(u.FirstName, u.LastName)</span>
+                                        <span class="user-name">@u.FirstName @u.LastName</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <select class="inline-select" value="@u.EntityId"
+                                            @onchange='e => ChangeEntity(u, e.Value?.ToString())'>
+                                        <option value="">— None —</option>
+                                        @foreach (var ent in entities)
+                                        {
+                                            <option value="@ent.Id">@ent.Name</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td class="text-muted">@u.Email</td>
+                                <td class="text-muted">@(string.IsNullOrEmpty(u.PhoneNumber) ? "—" : u.PhoneNumber)</td>
+                                <td class="text-muted mono">@(string.IsNullOrEmpty(u.Username) ? "—" : u.Username)</td>
+                                <td>
+                                    <select class="inline-select"
+                                            value="@(u.Roles.FirstOrDefault() ?? "User")"
+                                            @onchange='e => ChangeRole(u, e.Value?.ToString())'>
+                                        <option value="User">User</option>
+                                        <option value="Technician">Technician</option>
+                                        <option value="Admin">Admin</option>
+                                        <option value="SuperAdmin">SuperAdmin</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <button class="status-toggle @(u.IsActive ? "status-active" : "status-inactive")"
+                                            @onclick="() => ToggleStatus(u)">
+                                        <span class="status-dot"></span>
+                                        @(u.IsActive ? "Active" : "Inactive")
+                                    </button>
+                                </td>
+                                <td class="col-actions">
+                                    <button class="btn-icon btn-edit" @onclick="() => OpenEditModal(u)" title="Edit">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                        </svg>
+                                    </button>
+                                    <button class="btn-icon btn-delete" @onclick="() => DeleteUser(u.Id)" title="Delete">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                            <path d="M10 11v6" />
+                                            <path d="M14 11v6" />
+                                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination-bar">
+                <div class="page-size-group">
+                    <span class="page-size-label">Rows per page:</span>
+                    @foreach (var size in pageSizeOptions)
+                    {
+                        <button class="page-size-btn @(pageSize == size ? "active" : "")"
+                                @onclick="() => SetPageSize(size)">
+                            @size
+                        </button>
+                    }
                 </div>
-                @foreach (var u in users)
-                {
-                    <div class="table-row">
-                        <div class="col-user">
-                            <span class="avatar">@GetInitials(u.FirstName, u.LastName)</span>
-                            <span>@u.FirstName @u.LastName</span>
-                        </div>
-                        <div class="col-text">@u.Email</div>
-                        <div class="col-text">@(string.IsNullOrEmpty(u.PhoneNumber) ? "—" : u.PhoneNumber)</div>
-                        <div>
-                            <select class="form-select form-select-sm role-select"
-                                    value="@(u.Roles.FirstOrDefault() ?? "User")"
-                                    @onchange="e => ChangeRole(u, e.Value?.ToString())">
-                                <option value="User">User</option>
-                                <option value="Technician">Technician</option>
-                                <option value="Admin">Admin</option>
-                                <option value="SuperAdmin">SuperAdmin</option>
-                            </select>
-                        </div>
-                        <div class="col-status">
-                            <span class="status-dot @(u.IsActive ? "active" : "inactive")"></span>
-                            @(u.IsActive ? "Active" : "Inactive")
-                        </div>
-                        <div>
-                            <button class="btn-action btn-edit" @onclick="() => OpenEditModal(u)">✏️</button>
-                        </div>
-                    </div>
-                }
+                <div class="page-nav">
+                    <span class="page-info">@((pageNumber - 1) * pageSize + 1)&ndash;@(Math.Min(pageNumber * pageSize, filteredUsers.Count)) of @filteredUsers.Count</span>
+                    <button class="page-btn" @onclick="FirstPage" disabled="@(pageNumber == 1)">&#171;</button>
+                    <button class="page-btn" @onclick="PrevPage" disabled="@(pageNumber == 1)">&#8249;</button>
+                    <span class="page-current">@pageNumber / @TotalPages</span>
+                    <button class="page-btn" @onclick="NextPage" disabled="@(pageNumber >= TotalPages)">&#8250;</button>
+                    <button class="page-btn" @onclick="LastPage" disabled="@(pageNumber >= TotalPages)">&#187;</button>
+                </div>
             </div>
         }
     </ChildContent>
 </AppShell>
 
+<!-- Add/Edit Modal -->
 @if (showModal)
 {
     <div class="modal-backdrop" @onclick="CloseModal">
         <div class="modal-box" @onclick:stopPropagation="true">
             <div class="modal-header">
-                <h5>@(isEditing ? "✏️ Edit User" : "➕ New User")</h5>
-                <button class="modal-close" @onclick="CloseModal">✕</button>
+                <h5>@(isEditing ? "Edit User" : "New User")</h5>
+                <button class="modal-close" @onclick="CloseModal">&#x2715;</button>
             </div>
             <div class="modal-body">
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">First Name</label>
-                        <input type="text" class="form-control" value="@form.FirstName"
-                               @oninput="e => form.FirstName = e.Value?.ToString() ?? string.Empty" />
+                @if (!string.IsNullOrEmpty(modalError))
+                {
+                    <div class="alert-error">@modalError</div>
+                }
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>EMPLOYEE CODE</label>
+                        <input class="form-control" placeholder="e.g. 17890" @bind="form.EmployeeCode" />
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Last Name</label>
-                        <input type="text" class="form-control" value="@form.LastName"
-                               @oninput="e => form.LastName = e.Value?.ToString() ?? string.Empty" />
+                    <div class="field-group">
+                        <label>USERNAME <span class="required">*</span></label>
+                        <input class="form-control" placeholder="e.g. vbcpon17890" @bind="form.Username" />
                     </div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">Email <span class="text-danger">*</span></label>
-                    <input type="email" class="form-control" value="@form.Email"
-                           @oninput="e => form.Email = e.Value?.ToString() ?? string.Empty" />
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>FIRST NAME</label>
+                        <input class="form-control" @bind="form.FirstName" />
+                    </div>
+                    <div class="field-group">
+                        <label>LAST NAME</label>
+                        <input class="form-control" @bind="form.LastName" />
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">Phone</label>
-                    <input type="text" class="form-control" value="@form.PhoneNumber"
-                           @oninput="e => form.PhoneNumber = e.Value?.ToString() ?? string.Empty" />
+                <div class="field-group">
+                    <label>EMAIL <span class="required">*</span></label>
+                    <input type="email" class="form-control" @bind="form.Email" />
+                </div>
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>PHONE</label>
+                        <input class="form-control" @bind="form.PhoneNumber" />
+                    </div>
+                    <div class="field-group">
+                        <label>ENTITY</label>
+                        <select class="form-control" @bind="form.EntityId">
+                            <option value="">— None —</option>
+                            @foreach (var ent in entities)
+                            {
+                                <option value="@ent.Id">@ent.Name</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="field-group">
+                    <label>@(isEditing ? "NEW PASSWORD" : "PASSWORD")@(isEditing ? "" : " *") <small class="text-muted">(min 8 characters)</small></label>
+                    <input type="password" class="form-control"
+                           placeholder="@(isEditing ? "Leave blank to keep current" : "Min 8 characters")"
+                           @bind="form.Password" />
                 </div>
                 @if (!isEditing)
                 {
-                    <div class="mb-3">
-                        <label class="form-label">Password <span class="text-danger">*</span></label>
-                        <input type="password" class="form-control" placeholder="Min 8 characters" value="@form.Password"
-                               @oninput="e => form.Password = e.Value?.ToString() ?? string.Empty" />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Role</label>
-                        <select class="form-select" @bind="form.RoleId">
+                    <div class="field-group">
+                        <label>ROLE</label>
+                        <select class="form-control" @bind="form.RoleId">
                             <option value="3">User</option>
                             <option value="4">Technician</option>
                             <option value="2">Admin</option>
@@ -111,20 +250,87 @@
                         </select>
                     </div>
                 }
-                else
-                {
-                    <div class="mb-3">
-                        <label class="form-label">New Password <small class="text-muted">(leave blank to keep current)</small></label>
-                        <input type="password" class="form-control" placeholder="Leave blank to keep unchanged" value="@form.Password"
-                               @oninput="e => form.Password = e.Value?.ToString() ?? string.Empty" />
-                    </div>
-                }
-                <div class="d-flex gap-2 justify-content-end">
-                    <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
-                    <button class="btn btn-primary" @onclick="SaveUser">
-                        @(isEditing ? "Update User" : "Create User")
+                <div class="modal-footer-btns">
+                    <button class="btn-cancel" @onclick="CloseModal">Cancel</button>
+                    <button class="btn-save" @onclick="SaveUser" disabled="@isSaving">
+                        @(isSaving ? "Saving..." : (isEditing ? "Save Changes" : "Create User"))
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Import Preview Modal -->
+@if (showImportModal)
+{
+    <div class="modal-backdrop" @onclick="CloseImportModal">
+        <div class="modal-box modal-box-wide" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h5>Import Users — @importRows.Count row@(importRows.Count == 1 ? "" : "s") found</h5>
+                <button class="modal-close" @onclick="CloseImportModal">&#x2715;</button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(importError))
+                {
+                    <div class="alert-error">@importError</div>
+                }
+                @if (importRows.Count > 0)
+                {
+                    <div class="import-hint">
+                        Required columns: <code>EmployeeCode, FirstName, LastName, Email, Phone, Username, EntityName, Role, Password</code>
+                    </div>
+                    <div class="import-table-wrapper">
+                        <table class="import-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Emp Code</th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Username</th>
+                                    <th>Entity</th>
+                                    <th>Role</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var (row, i) in importRows.Select((r, i) => (r, i)))
+                                {
+                                    <tr class="@(row.Error != null ? "row-error" : "")">
+                                        <td class="text-muted">@(i + 1)</td>
+                                        <td>@row.EmployeeCode</td>
+                                        <td>@row.FirstName @row.LastName</td>
+                                        <td>@row.Email</td>
+                                        <td>@row.Username</td>
+                                        <td>@row.EntityName</td>
+                                        <td>@row.Role</td>
+                                        <td>
+                                            @if (row.Error != null)
+                                            {
+                                                <span class="import-status-error" title="@row.Error">&#x26A0; @row.Error</span>
+                                            }
+                                            else if (row.Imported)
+                                            {
+                                                <span class="import-status-ok">&#x2713; Imported</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="import-status-pending">Ready</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="modal-footer-btns">
+                        <button class="btn-cancel" @onclick="CloseImportModal">Cancel</button>
+                        <button class="btn-save" @onclick="RunImport" disabled="@isImporting">
+                            @(isImporting ? "Importing..." : $"Import {importRows.Count(r => r.Error == null && !r.Imported)} Users")
+                        </button>
+                    </div>
+                }
             </div>
         </div>
     </div>
@@ -136,72 +342,710 @@
 }
 
 <style>
-    .content-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
-    .content-title { font-size: 1.5rem; font-weight: 700; color: #1e1b4b; margin: 0; }
-    .content-subtitle { color: #6b7280; font-size: 0.875rem; margin: 0; }
+    .content-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .content-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1e1b4b;
+        margin: 0;
+    }
+
+    .content-subtitle {
+        color: #6b7280;
+        font-size: 0.875rem;
+        margin: 0;
+    }
+
+    .header-actions {
+        display: flex;
+        gap: 0.6rem;
+        align-items: center;
+    }
+
+    .btn-import {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: white;
+        border: 1.5px solid #e5e7eb;
+        color: #374151;
+        padding: 0.55rem 1rem;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+        .btn-import:hover {
+            border-color: #7c3aed;
+            color: #7c3aed;
+            background: #faf5ff;
+        }
+
     .btn-create {
         background: linear-gradient(135deg, #059669, #10b981);
-        color: white; border: none; padding: 0.65rem 1.25rem; border-radius: 10px;
-        font-weight: 600; cursor: pointer; font-size: 0.9rem;
+        color: white;
+        border: none;
+        padding: 0.6rem 1.25rem;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: opacity 0.2s;
     }
-    .loading-state { text-align: center; padding: 4rem; color: #6b7280; }
 
-    .user-table { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
-    .table-header {
-        display: grid; grid-template-columns: 1.6fr 2fr 1fr 1.2fr 0.9fr 0.6fr;
-        padding: 0.75rem 1.25rem; background: #f8f7ff; font-size: 0.78rem; font-weight: 700;
-        color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #e5e7eb;
-    }
-    .table-row {
-        display: grid; grid-template-columns: 1.6fr 2fr 1fr 1.2fr 0.9fr 0.6fr;
-        padding: 0.85rem 1.25rem; border-bottom: 1px solid #f3f4f6; align-items: center; font-size: 0.875rem;
-    }
-    .table-row:last-child { border-bottom: none; }
-    .table-row:hover { background: #fafafa; }
+        .btn-create:hover {
+            opacity: 0.9;
+        }
 
-    .col-user { display: flex; align-items: center; gap: 0.6rem; font-weight: 600; color: #1f2937; }
+    /* Filters */
+    .filter-bar {
+        display: flex;
+        gap: 0.6rem;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 1rem;
+        background: white;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+
+    .filter-search {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 0.35rem 0.75rem;
+        background: white;
+        flex: 1;
+        min-width: 200px;
+        transition: border-color 0.15s;
+    }
+
+        .filter-search:focus-within {
+            border-color: #7c3aed;
+        }
+
+        .filter-search svg {
+            color: #9ca3af;
+            flex-shrink: 0;
+        }
+
+    .filter-input {
+        border: none;
+        outline: none;
+        font-size: 0.875rem;
+        color: #374151;
+        background: transparent;
+        width: 100%;
+    }
+
+    .filter-select {
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.875rem;
+        color: #374151;
+        background: white;
+        cursor: pointer;
+        outline: none;
+        transition: border-color 0.15s;
+    }
+
+        .filter-select:focus {
+            border-color: #7c3aed;
+        }
+
+    .btn-clear-filter {
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1.5px solid #fecaca;
+        border-radius: 8px;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+        .btn-clear-filter:hover {
+            background: #fecaca;
+        }
+
+    .loading-state, .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6b7280;
+    }
+
+    /* Table */
+    .table-wrapper {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        overflow-x: auto;
+    }
+
+    .user-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+    }
+
+        .user-table thead tr {
+            background: #f8f7ff;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .user-table th {
+            padding: 0.85rem 1rem;
+            text-align: left;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            white-space: nowrap;
+        }
+
+        .user-table td {
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid #f3f4f6;
+            color: #1f2937;
+            vertical-align: middle;
+        }
+
+        .user-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .user-table tbody tr:hover {
+            background: #fafafa;
+        }
+
+    .col-user {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+    }
+
+    .user-name {
+        font-weight: 600;
+        color: #1e1b4b;
+        white-space: nowrap;
+    }
+
     .avatar {
-        width: 32px; height: 32px; background: linear-gradient(135deg, #7c3aed, #4f46e5);
-        border-radius: 50%; display: flex; align-items: center; justify-content: center;
-        color: white; font-weight: 700; font-size: 0.75rem; flex-shrink: 0;
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 700;
+        font-size: 0.72rem;
     }
-    .col-text { color: #6b7280; }
-    .role-select { max-width: 150px; }
-    .col-status { display: flex; align-items: center; gap: 0.4rem; }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; }
-    .status-dot.active { background: #22c55e; }
-    .status-dot.inactive { background: #d1d5db; }
 
-    .btn-action {
-        width: 32px; height: 32px; border: none; border-radius: 8px; cursor: pointer;
-        font-size: 0.9rem; display: flex; align-items: center; justify-content: center;
+    .text-muted {
+        color: #6b7280;
     }
-    .btn-edit { background: #eff6ff; } .btn-edit:hover { background: #dbeafe; }
 
+    .mono {
+        font-family: 'Courier New', monospace;
+        font-size: 0.82rem;
+    }
+
+    .inline-select {
+        border: 1.5px solid #e5e7eb;
+        border-radius: 7px;
+        padding: 0.3rem 0.6rem;
+        font-size: 0.82rem;
+        color: #374151;
+        background: white;
+        cursor: pointer;
+        outline: none;
+        transition: border-color 0.15s;
+        max-width: 160px;
+    }
+
+        .inline-select:hover, .inline-select:focus {
+            border-color: #7c3aed;
+        }
+
+    .status-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border: none;
+        border-radius: 20px;
+        padding: 0.25rem 0.75rem;
+        font-size: 0.78rem;
+        font-weight: 700;
+        cursor: pointer;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        transition: all 0.15s;
+        white-space: nowrap;
+    }
+
+        .status-toggle .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+        }
+
+    .status-active {
+        background: #f0fdf4;
+        color: #16a34a;
+    }
+
+        .status-active .status-dot {
+            background: #16a34a;
+        }
+
+        .status-active:hover {
+            background: #fef2f2;
+            color: #dc2626;
+        }
+
+            .status-active:hover .status-dot {
+                background: #dc2626;
+            }
+
+    .status-inactive {
+        background: #f3f4f6;
+        color: #9ca3af;
+    }
+
+        .status-inactive .status-dot {
+            background: #9ca3af;
+        }
+
+        .status-inactive:hover {
+            background: #f0fdf4;
+            color: #16a34a;
+        }
+
+            .status-inactive:hover .status-dot {
+                background: #16a34a;
+            }
+
+    .col-actions {
+        width: 80px;
+        white-space: nowrap;
+    }
+
+    .btn-icon {
+        width: 30px;
+        height: 30px;
+        border: none;
+        border-radius: 7px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s;
+        margin-right: 2px;
+    }
+
+    .btn-edit {
+        background: #eff6ff;
+        color: #2563eb;
+    }
+
+        .btn-edit:hover {
+            background: #dbeafe;
+        }
+
+    .btn-delete {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+        .btn-delete:hover {
+            background: #fecaca;
+        }
+
+    /* Pagination */
+    .pagination-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.25rem;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .page-size-group {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .page-size-label {
+        font-size: 0.8rem;
+        color: #6b7280;
+        white-space: nowrap;
+    }
+
+    .page-size-btn {
+        padding: 0.3rem 0.7rem;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 6px;
+        background: white;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #6b7280;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+        .page-size-btn:hover {
+            border-color: #7c3aed;
+            color: #7c3aed;
+        }
+
+        .page-size-btn.active {
+            background: #7c3aed;
+            color: white;
+            border-color: #7c3aed;
+        }
+
+    .page-nav {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .page-info {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-right: 0.5rem;
+        white-space: nowrap;
+    }
+
+    .page-btn {
+        width: 32px;
+        height: 32px;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 7px;
+        background: white;
+        font-size: 1rem;
+        color: #374151;
+        cursor: pointer;
+        transition: all 0.15s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .page-btn:hover:not(:disabled) {
+            border-color: #7c3aed;
+            color: #7c3aed;
+        }
+
+        .page-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+    .page-current {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #374151;
+        padding: 0 0.4rem;
+        white-space: nowrap;
+    }
+
+    /* Modal */
     .modal-backdrop {
-        position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000;
-        display: flex; align-items: center; justify-content: center; padding: 1rem;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
     }
-    .modal-box { background: white; border-radius: 16px; width: 100%; max-width: 480px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto; }
-    .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid #e5e7eb; }
-    .modal-header h5 { margin: 0; font-weight: 700; color: #1e1b4b; }
-    .modal-close { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #6b7280; width: 32px; height: 32px; border-radius: 8px; }
-    .modal-close:hover { background: #f3f4f6; }
-    .modal-body { padding: 1.5rem; }
+
+    .modal-box {
+        background: white;
+        border-radius: 16px;
+        width: 100%;
+        max-width: 540px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .modal-box-wide {
+        max-width: 820px;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #e5e7eb;
+        position: sticky;
+        top: 0;
+        background: white;
+        z-index: 1;
+    }
+
+        .modal-header h5 {
+            margin: 0;
+            font-weight: 700;
+            color: #1e1b4b;
+            font-size: 1rem;
+        }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.1rem;
+        cursor: pointer;
+        color: #6b7280;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+    }
+
+        .modal-close:hover {
+            background: #f3f4f6;
+        }
+
+    .modal-body {
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .alert-error {
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        padding: 0.65rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .field-row {
+        display: flex;
+        gap: 1rem;
+    }
+
+        .field-row .field-group {
+            flex: 1;
+        }
+
+    .field-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+        .field-group label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: #374151;
+        }
+
+    .required {
+        color: #dc2626;
+    }
+
+    .form-control {
+        border-radius: 8px;
+        border: 1.5px solid #e5e7eb;
+        padding: 0.6rem 0.9rem;
+        font-size: 0.9rem;
+        outline: none;
+        font-family: inherit;
+        transition: border-color 0.2s;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+        .form-control:focus {
+            border-color: #7c3aed;
+        }
+
+    .modal-footer-btns {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        padding-top: 0.25rem;
+    }
+
+    .btn-cancel {
+        background: white;
+        border: 1.5px solid #e5e7eb;
+        color: #6b7280;
+        padding: 0.55rem 1.1rem;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .btn-cancel:hover {
+            background: #f9fafb;
+        }
+
+    .btn-save {
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        color: white;
+        border: none;
+        padding: 0.55rem 1.25rem;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.2s;
+    }
+
+        .btn-save:hover:not(:disabled) {
+            opacity: 0.9;
+        }
+
+        .btn-save:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+    /* Import */
+    .import-hint {
+        font-size: 0.8rem;
+        color: #6b7280;
+        background: #f8f7ff;
+        padding: 0.6rem 0.9rem;
+        border-radius: 8px;
+    }
+
+        .import-hint code {
+            background: #ede9fe;
+            color: #5b21b6;
+            padding: 0.1rem 0.3rem;
+            border-radius: 4px;
+            font-size: 0.78rem;
+        }
+
+    .import-table-wrapper {
+        overflow-x: auto;
+        max-height: 320px;
+        overflow-y: auto;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+    }
+
+    .import-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.82rem;
+    }
+
+        .import-table th {
+            background: #f8f7ff;
+            padding: 0.6rem 0.75rem;
+            text-align: left;
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .import-table td {
+            padding: 0.55rem 0.75rem;
+            border-bottom: 1px solid #f3f4f6;
+            vertical-align: middle;
+        }
+
+        .import-table tr.row-error td {
+            background: #fef9f9;
+        }
+
+    .import-status-ok {
+        color: #16a34a;
+        font-weight: 600;
+        font-size: 0.8rem;
+    }
+
+    .import-status-error {
+        color: #dc2626;
+        font-weight: 600;
+        font-size: 0.78rem;
+    }
+
+    .import-status-pending {
+        color: #6b7280;
+        font-size: 0.78rem;
+    }
 
     .toast-box {
-        position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.875rem 1.5rem; border-radius: 10px;
-        font-weight: 600; font-size: 0.9rem; z-index: 9999; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        padding: 0.875rem 1.5rem;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        z-index: 9999;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
     }
-    .toast-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
-    .toast-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+    .toast-success {
+        background: #f0fdf4;
+        color: #16a34a;
+        border: 1px solid #bbf7d0;
+    }
+
+    .toast-error {
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+    }
 </style>
 
 @code {
-    List<UserDto> users = new();
-    bool isLoading = true, showModal = false, isEditing = false, showToast = false;
-    string toastMessage = "", toastType = "";
+    List<UserDto> allUsers = new();
+    List<UserDto> filteredUsers = new();
+    List<EntityItem> entities = new();
+    bool isLoading = true, showModal = false, isEditing = false, isSaving = false, showToast = false;
+    string toastMessage = "", toastType = "", modalError = "";
     UserForm form = new();
+
+    // Filters
+    string filterSearch = "", filterRole = "", filterEntity = "", filterStatus = "";
+
+    // Pagination
+    int pageNumber = 1, pageSize = 25;
+    int[] pageSizeOptions = { 10, 25, 50, 100 };
+    int TotalPages => Math.Max(1, (int)Math.Ceiling((double)filteredUsers.Count / pageSize));
+    IEnumerable<UserDto> PagedUsers => filteredUsers.Skip((pageNumber - 1) * pageSize).Take(pageSize);
+
+    // Import
+    bool showImportModal = false, isImporting = false;
+    string importError = "";
+    List<ImportRow> importRows = new();
 
     static readonly Dictionary<string, int> RoleIds = new()
     {
@@ -213,64 +1057,284 @@
         await AuthService.InitializeAsync();
         if (!AuthService.IsAuthenticated) { Navigation.NavigateTo("/login"); return; }
         if (!AuthService.HasPermission("CanManageUsers")) { Navigation.NavigateTo("/tickets"); return; }
-        await LoadUsers();
+        await Task.WhenAll(LoadUsers(), LoadEntities());
     }
 
     async Task LoadUsers()
     {
         isLoading = true;
-        users = await Http.CreateClient("API").GetFromJsonAsync<List<UserDto>>("api/users") ?? new();
-        isLoading = false;
+        try
+        {
+            allUsers = await Http.CreateClient("API").GetFromJsonAsync<List<UserDto>>("api/users") ?? new();
+            ApplyFilters();
+        }
+        catch (Exception ex) { ShowToast("Failed to load users: " + ex.Message, "error"); }
+        finally { isLoading = false; }
     }
 
-    void OpenCreateModal() { isEditing = false; form = new() { RoleId = 3 }; showModal = true; }
+    async Task LoadEntities()
+    {
+        try { entities = await Http.CreateClient("API").GetFromJsonAsync<List<EntityItem>>("api/entity") ?? new(); }
+        catch { entities = new(); }
+    }
+
+    void ApplyFilters()
+    {
+        var q = allUsers.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(filterSearch))
+        {
+            var s = filterSearch.Trim().ToLower();
+            q = q.Where(u =>
+                (u.FirstName + " " + u.LastName).ToLower().Contains(s) ||
+                u.Email.ToLower().Contains(s) ||
+                (u.EmployeeCode ?? "").ToLower().Contains(s) ||
+                (u.Username ?? "").ToLower().Contains(s));
+        }
+
+        if (!string.IsNullOrEmpty(filterRole))
+            q = q.Where(u => u.Roles.Contains(filterRole));
+
+        if (!string.IsNullOrEmpty(filterEntity) && int.TryParse(filterEntity, out var eid))
+            q = q.Where(u => u.EntityId == eid);
+
+        if (filterStatus == "active") q = q.Where(u => u.IsActive);
+        else if (filterStatus == "inactive") q = q.Where(u => !u.IsActive);
+
+        filteredUsers = q.ToList();
+        pageNumber = 1;
+    }
+
+    void ClearFilters()
+    {
+        filterSearch = ""; filterRole = ""; filterEntity = ""; filterStatus = "";
+        ApplyFilters();
+    }
+
+    void SetPageSize(int size) { pageSize = size; pageNumber = 1; }
+    void FirstPage() => pageNumber = 1;
+    void PrevPage() { if (pageNumber > 1) pageNumber--; }
+    void NextPage() { if (pageNumber < TotalPages) pageNumber++; }
+    void LastPage() => pageNumber = TotalPages;
+
+    // Import
+    async Task HandleImportFile(InputFileChangeEventArgs e)
+    {
+        importError = ""; importRows = new();
+        var file = e.File;
+        if (file == null) return;
+
+        if (!file.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+        {
+            importError = "Only CSV files are supported.";
+            showImportModal = true;
+            return;
+        }
+
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024);
+            using var reader = new System.IO.StreamReader(stream);
+            var lines = new List<string>();
+            while (!reader.EndOfStream)
+            {
+                var line = await reader.ReadLineAsync();
+                if (line != null) lines.Add(line);
+            }
+
+            if (lines.Count < 2) { importError = "CSV must have a header row and at least one data row."; showImportModal = true; return; }
+
+            var headers = lines[0].Split(',').Select(h => h.Trim().ToLower()).ToArray();
+            int Col(string name) => Array.IndexOf(headers, name.ToLower());
+
+            int cEmpCode = Col("employeecode"), cFirst = Col("firstname"), cLast = Col("lastname");
+            int cEmail = Col("email"), cPhone = Col("phone"), cUsername = Col("username");
+            int cEntity = Col("entityname"), cRole = Col("role"), cPass = Col("password");
+
+            for (int i = 1; i < lines.Count; i++)
+            {
+                if (string.IsNullOrWhiteSpace(lines[i])) continue;
+                var cols = lines[i].Split(',');
+                string Get(int idx) => idx >= 0 && idx < cols.Length ? cols[idx].Trim() : "";
+
+                var row = new ImportRow
+                {
+                    EmployeeCode = Get(cEmpCode),
+                    FirstName = Get(cFirst),
+                    LastName = Get(cLast),
+                    Email = Get(cEmail),
+                    Phone = Get(cPhone),
+                    Username = Get(cUsername),
+                    EntityName = Get(cEntity),
+                    Role = Get(cRole),
+                    Password = Get(cPass)
+                };
+
+                if (string.IsNullOrWhiteSpace(row.Email)) row.Error = "Email required";
+                else if (string.IsNullOrWhiteSpace(row.Username)) row.Error = "Username required";
+                else if (string.IsNullOrWhiteSpace(row.Password) || row.Password.Length < 8) row.Error = "Password min 8 chars";
+                else if (!string.IsNullOrWhiteSpace(row.Role) && !RoleIds.ContainsKey(row.Role)) row.Error = $"Invalid role '{row.Role}'";
+
+                importRows.Add(row);
+            }
+
+            showImportModal = true;
+        }
+        catch (Exception ex) { importError = "Parse error: " + ex.Message; showImportModal = true; }
+    }
+
+    async Task RunImport()
+    {
+        isImporting = true;
+        var client = Http.CreateClient("API");
+        int ok = 0, fail = 0;
+
+        foreach (var row in importRows.Where(r => r.Error == null && !r.Imported))
+        {
+            var entityId = entities.FirstOrDefault(e => e.Name.Equals(row.EntityName, StringComparison.OrdinalIgnoreCase))?.Id;
+            var roleId = RoleIds.TryGetValue(row.Role ?? "User", out var rid) ? rid : 3;
+
+            var dto = new
+            {
+                EmployeeCode = row.EmployeeCode,
+                Username = row.Username,
+                Email = row.Email,
+                Password = row.Password,
+                FirstName = row.FirstName,
+                LastName = row.LastName,
+                PhoneNumber = row.Phone,
+                EntityId = (int?)entityId,
+                RoleId = roleId
+            };
+
+            try
+            {
+                var response = await client.PostAsJsonAsync("api/users", dto);
+                if (response.IsSuccessStatusCode) { row.Imported = true; ok++; }
+                else
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    try { row.Error = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString(); }
+                    catch { row.Error = $"HTTP {(int)response.StatusCode}"; }
+                    fail++;
+                }
+            }
+            catch (Exception ex) { row.Error = ex.Message; fail++; }
+
+            StateHasChanged();
+        }
+
+        isImporting = false;
+        ShowToast($"Import done: {ok} succeeded, {fail} failed", fail == 0 ? "success" : "error");
+        if (ok > 0) await LoadUsers();
+    }
+
+    void CloseImportModal() { showImportModal = false; importError = ""; importRows = new(); }
+
+    void OpenCreateModal() { isEditing = false; form = new() { RoleId = 3 }; modalError = ""; showModal = true; }
+
     void OpenEditModal(UserDto u)
     {
         isEditing = true;
-        form = new() { Id = u.Id, FirstName = u.FirstName, LastName = u.LastName, Email = u.Email, PhoneNumber = u.PhoneNumber ?? "" };
-        showModal = true;
+        form = new()
+        {
+            Id = u.Id,
+            EmployeeCode = u.EmployeeCode ?? "",
+            Username = u.Username ?? "",
+            FirstName = u.FirstName,
+            LastName = u.LastName,
+            Email = u.Email,
+            PhoneNumber = u.PhoneNumber ?? "",
+            EntityId = u.EntityId?.ToString() ?? ""
+        };
+        modalError = ""; showModal = true;
     }
-    void CloseModal() => showModal = false;
+
+    void CloseModal() { showModal = false; modalError = ""; }
 
     async Task SaveUser()
     {
-        if (string.IsNullOrWhiteSpace(form.Email)) { ShowToast("Email is required", "error"); return; }
-        if (!isEditing && form.Password.Length < 8) { ShowToast("Password must be at least 8 characters", "error"); return; }
+        modalError = "";
+        if (string.IsNullOrWhiteSpace(form.Email)) { modalError = "Email is required."; return; }
+        if (string.IsNullOrWhiteSpace(form.Username)) { modalError = "Username is required."; return; }
+        if (!isEditing && form.Password.Length < 8) { modalError = "Password must be at least 8 characters."; return; }
 
-        var client = Http.CreateClient("API");
-        HttpResponseMessage response;
+        isSaving = true;
+        try
+        {
+            var client = Http.CreateClient("API");
+            int? entityId = int.TryParse(form.EntityId, out var eid) ? eid : null;
+            HttpResponseMessage response;
 
-        if (isEditing)
-        {
-            var dto = new { form.Email, form.FirstName, form.LastName, form.PhoneNumber, NewPassword = string.IsNullOrWhiteSpace(form.Password) ? null : form.Password };
-            response = await client.PutAsJsonAsync($"api/users/{form.Id}", dto);
-        }
-        else
-        {
-            var dto = new { form.Email, form.Password, form.FirstName, form.LastName, form.PhoneNumber, form.RoleId };
-            response = await client.PostAsJsonAsync("api/users", dto);
-        }
+            if (isEditing)
+            {
+                var dto = new { form.EmployeeCode, form.Username, form.Email, form.FirstName, form.LastName, form.PhoneNumber, EntityId = entityId, NewPassword = string.IsNullOrWhiteSpace(form.Password) ? null : form.Password };
+                response = await client.PutAsJsonAsync($"api/users/{form.Id}", dto);
+            }
+            else
+            {
+                var dto = new { form.EmployeeCode, form.Username, form.Email, form.Password, form.FirstName, form.LastName, form.PhoneNumber, EntityId = entityId, form.RoleId };
+                response = await client.PostAsJsonAsync("api/users", dto);
+            }
 
-        if (response.IsSuccessStatusCode) { ShowToast(isEditing ? "User updated" : "User created", "success"); CloseModal(); await LoadUsers(); }
-        else
-        {
-            var body = await response.Content.ReadAsStringAsync();
-            string msg = "Failed to save user";
-            try { msg = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? msg; } catch { }
-            ShowToast(msg, "error");
+            if (response.IsSuccessStatusCode) { ShowToast(isEditing ? "User updated" : "User created", "success"); CloseModal(); await LoadUsers(); }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                string msg = "Failed to save user";
+                try { msg = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? msg; } catch { }
+                modalError = msg;
+            }
         }
+        catch (Exception ex) { modalError = "Error: " + ex.Message; }
+        finally { isSaving = false; }
     }
 
     async Task ChangeRole(UserDto user, string? newRole)
     {
         if (string.IsNullOrEmpty(newRole) || !RoleIds.ContainsKey(newRole)) return;
-        var response = await Http.CreateClient("API").PatchAsJsonAsync($"api/users/{user.Id}/role", new { RoleId = RoleIds[newRole] });
+        var content = new StringContent(System.Text.Json.JsonSerializer.Serialize(new { RoleId = RoleIds[newRole] }), System.Text.Encoding.UTF8, "application/json");
+        var response = await Http.CreateClient("API").PatchAsync($"api/users/{user.Id}/role", content);
         if (response.IsSuccessStatusCode) { ShowToast($"Role updated to {newRole}", "success"); await LoadUsers(); }
         else ShowToast("Failed to update role", "error");
     }
 
+    async Task ChangeEntity(UserDto user, string? entityIdStr)
+    {
+        int? entityId = int.TryParse(entityIdStr, out var eid) ? eid : null;
+        var dto = new { user.EmployeeCode, user.Username, user.Email, user.FirstName, user.LastName, user.PhoneNumber, EntityId = entityId, NewPassword = (string?)null };
+        var response = await Http.CreateClient("API").PutAsJsonAsync($"api/users/{user.Id}", dto);
+        if (response.IsSuccessStatusCode)
+        {
+            var u = allUsers.First(x => x.Id == user.Id);
+            u.EntityId = entityId;
+            u.EntityName = entities.FirstOrDefault(e => e.Id == entityId)?.Name;
+            ApplyFilters(); ShowToast("Entity updated", "success"); StateHasChanged();
+        }
+        else ShowToast("Failed to update entity", "error");
+    }
+
+    async Task ToggleStatus(UserDto user)
+    {
+        var newStatus = !user.IsActive;
+        var content = new StringContent(System.Text.Json.JsonSerializer.Serialize(new { IsActive = newStatus }), System.Text.Encoding.UTF8, "application/json");
+        var response = await Http.CreateClient("API").PatchAsync($"api/users/{user.Id}/status", content);
+        if (response.IsSuccessStatusCode) { user.IsActive = newStatus; ApplyFilters(); ShowToast(newStatus ? "User activated" : "User deactivated", "success"); StateHasChanged(); }
+        else ShowToast("Failed to update status", "error");
+    }
+
+    async Task DeleteUser(int id)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Delete this user? This cannot be undone.");
+        if (!confirmed) return;
+        var response = await Http.CreateClient("API").DeleteAsync($"api/users/{id}");
+        if (response.IsSuccessStatusCode) { ShowToast("User deleted", "success"); await LoadUsers(); }
+        else ShowToast("Failed to delete user", "error");
+    }
+
     string GetInitials(string first, string last)
-        => ((string.IsNullOrEmpty(first) ? "" : first[0].ToString()) + (string.IsNullOrEmpty(last) ? "" : last[0].ToString())).ToUpper();
+        => ((string.IsNullOrEmpty(first) ? "" : first[0].ToString()) +
+            (string.IsNullOrEmpty(last) ? "" : last[0].ToString())).ToUpper();
 
     void ShowToast(string msg, string type)
     {
@@ -278,6 +1342,54 @@
         _ = Task.Run(async () => { await Task.Delay(3000); showToast = false; await InvokeAsync(StateHasChanged); });
     }
 
-    public class UserDto { public int Id { get; set; } public string FirstName { get; set; } = ""; public string LastName { get; set; } = ""; public string Email { get; set; } = ""; public string? PhoneNumber { get; set; } public bool IsActive { get; set; } public List<string> Roles { get; set; } = new(); }
-    public class UserForm { public int Id { get; set; } public string FirstName { get; set; } = ""; public string LastName { get; set; } = ""; public string Email { get; set; } = ""; public string PhoneNumber { get; set; } = ""; public string Password { get; set; } = ""; public int RoleId { get; set; } = 3; }
+    public class UserDto
+    {
+        public int Id { get; set; }
+        public string EmployeeCode { get; set; } = "";
+        public string Username { get; set; } = "";
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string? PhoneNumber { get; set; }
+        public int? EntityId { get; set; }
+        public string? EntityName { get; set; }
+        public bool IsActive { get; set; }
+        public List<string> Roles { get; set; } = new();
+    }
+
+    public class UserForm
+    {
+        public int Id { get; set; }
+        public string EmployeeCode { get; set; } = "";
+        public string Username { get; set; } = "";
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string PhoneNumber { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string EntityId { get; set; } = "";
+        public int RoleId { get; set; } = 3;
+    }
+
+    public class EntityItem
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public bool IsActive { get; set; }
+    }
+
+    public class ImportRow
+    {
+        public string EmployeeCode { get; set; } = "";
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string Phone { get; set; } = "";
+        public string Username { get; set; } = "";
+        public string EntityName { get; set; } = "";
+        public string Role { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string? Error { get; set; }
+        public bool Imported { get; set; }
+    }
 }

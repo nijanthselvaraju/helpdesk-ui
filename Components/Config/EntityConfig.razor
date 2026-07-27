@@ -1,0 +1,1201 @@
+@page "/config/entities"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject IHttpClientFactory Http
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@using TicketingSystem.UI.Services
+
+<AppShell>
+    <ChildContent>
+        <div class="content-header">
+            <div>
+                <h1 class="content-title">Entity Config</h1>
+                <p class="content-subtitle">@totalItems entit@(totalItems == 1 ? "y" : "ies") found</p>
+            </div>
+            <div class="header-actions">
+                <div class="export-group">
+                    <div class="settings-wrapper">
+                        <button class="btn-icon-settings @(showSettingsMenu ? "active" : "")" @onclick="ToggleSettingsMenu" title="Settings">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                                <circle cx="12" cy="12" r="3" />
+                            </svg>
+                        </button>
+                        @if (showSettingsMenu)
+                        {
+                            <div class="settings-dropdown">
+                                <button class="settings-item" @onclick="OpenEntityTypeModal">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect width="7" height="7" x="3" y="3" rx="1" />
+                                        <rect width="7" height="7" x="14" y="3" rx="1" />
+                                        <rect width="7" height="7" x="14" y="14" rx="1" />
+                                        <rect width="7" height="7" x="3" y="14" rx="1" />
+                                    </svg>
+                                    Manage Entity Types
+                                </button>
+                            </div>
+                        }
+                    </div>
+                    <button class="btn-export" @onclick='() => ExportData("csv")' title="Export CSV">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" x2="12" y1="15" y2="3" />
+                        </svg>
+                        CSV
+                    </button>
+                    <button class="btn-export" @onclick='() => ExportData("excel")' title="Export Excel">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" x2="12" y1="15" y2="3" />
+                        </svg>
+                        Excel
+                    </button>
+                </div>
+                <button class="btn-add" @onclick="OpenAddModal">+ Add Entity</button>
+            </div>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="loading-state">
+                <div class="spinner-border text-primary"></div>
+                <p>Loading entities...</p>
+            </div>
+        }
+        else if (allEntities.Count == 0)
+        {
+            <div class="empty-state">
+                <span class="empty-icon">&#x1F3E2;</span>
+                <h5>No entities yet</h5>
+                <p>Click <strong>Add Entity</strong> to create your first one.</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-wrapper">
+                <table class="entity-table">
+                    <thead>
+                        <tr>
+                            <th class="col-num">#</th>
+                            <th>Entity Type</th>
+                            <th>Entity Name</th>
+                            <th>Entity Code</th>
+                            <th>Status</th>
+                            <th>Created At</th>
+                            <th class="col-actions">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (e, index) in PagedEntities.Select((e, i) => (e, i)))
+                        {
+                            <tr>
+                                <td class="col-num text-muted">@((pageNumber - 1) * pageSize + index + 1)</td>
+                                <td><span class="type-badge">@e.EntityType</span></td>
+                                <td class="entity-name-cell">@e.Name</td>
+                                <td><code class="entity-code">@e.EntityCode</code></td>
+                                <td>
+                                    <span class="status-badge @(e.IsActive ? "status-active" : "status-inactive")">
+                                        @(e.IsActive ? "Active" : "Inactive")
+                                    </span>
+                                </td>
+                                <td class="text-muted">@e.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")</td>
+                                <td class="col-actions">
+                                    <button class="btn-icon btn-edit" @onclick="() => OpenEditModal(e)" title="Edit">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                        </svg>
+                                    </button>
+                                    <button class="btn-icon btn-delete" @onclick="() => DeleteEntity(e.Id)" title="Delete">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                            <path d="M10 11v6" />
+                                            <path d="M14 11v6" />
+                                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination-bar">
+                <div class="page-size-group">
+                    <span class="page-size-label">Rows per page:</span>
+                    @foreach (var size in pageSizeOptions)
+                    {
+                        <button class="page-size-btn @(pageSize == size ? "active" : "")"
+                                @onclick="() => SetPageSize(size)">
+                            @size
+                        </button>
+                    }
+                </div>
+                <div class="page-nav">
+                    <span class="page-info">
+                        @((pageNumber - 1) * pageSize + 1)&ndash;@(Math.Min(pageNumber * pageSize, totalItems)) of @totalItems
+                    </span>
+                    <button class="page-btn" @onclick="FirstPage" disabled="@(pageNumber == 1)" title="First">&#171;</button>
+                    <button class="page-btn" @onclick="PrevPage" disabled="@(pageNumber == 1)" title="Previous">&#8249;</button>
+                    <span class="page-current">@pageNumber / @TotalPages</span>
+                    <button class="page-btn" @onclick="NextPage" disabled="@(pageNumber >= TotalPages)" title="Next">&#8250;</button>
+                    <button class="page-btn" @onclick="LastPage" disabled="@(pageNumber >= TotalPages)" title="Last">&#187;</button>
+                </div>
+            </div>
+        }
+    </ChildContent>
+</AppShell>
+
+@if (showModal)
+{
+    <div class="modal-backdrop" @onclick="CloseModal">
+        <div class="modal-box" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h5>@(isEditing ? "Edit Entity" : "Add Entity")</h5>
+                <button class="modal-close" @onclick="CloseModal">&#x2715;</button>
+            </div>
+            <div class="modal-body">
+                @if (!string.IsNullOrEmpty(modalError))
+                {
+                    <div class="alert-error">@modalError</div>
+                }
+                <div class="field-row">
+                    <div class="field-group">
+                        <label>ENTITY TYPE <span class="required">*</span></label>
+                        <select class="form-control" @bind="formEntityType">
+                            <option value="">&#8212; Select Type &#8212;</option>
+                            @foreach (var et in entityTypes.Where(t => t.IsActive))
+                            {
+                                <option value="@et.Name">@et.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label>ENTITY CODE <span class="required">*</span></label>
+                        <input class="form-control" placeholder="e.g. VBC-KOL" @bind="formEntityCode" style="text-transform:uppercase" />
+                    </div>
+                </div>
+                <div class="field-group">
+                    <label>ENTITY NAME <span class="required">*</span></label>
+                    <input class="form-control" placeholder="e.g. Velammal Bodhi Campus - Kolapakkam" @bind="formName" />
+                </div>
+                <div class="field-group">
+                    <label class="toggle-label">
+                        <input type="checkbox" @bind="formIsActive" />
+                        <span>Active</span>
+                    </label>
+                </div>
+                <div class="modal-footer-btns">
+                    <button class="btn-cancel" @onclick="CloseModal">Cancel</button>
+                    <button class="btn-save" @onclick="SaveEntity" disabled="@isSaving">
+                        @(isSaving ? "Saving..." : (isEditing ? "Save Changes" : "Add Entity"))
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (showEntityTypeModal)
+{
+    <div class="modal-backdrop" @onclick="CloseEntityTypeModal">
+        <div class="modal-box modal-box-wide" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h5>Manage Entity Types</h5>
+                <button class="modal-close" @onclick="CloseEntityTypeModal">&#x2715;</button>
+            </div>
+            <div class="modal-body">
+                <div class="et-add-row">
+                    <input class="form-control" placeholder="New entity type name" @bind="newEntityTypeName" @bind:event="oninput" />
+                    <button class="btn-save" @onclick="AddEntityType" disabled="@(string.IsNullOrWhiteSpace(newEntityTypeName) || etLoading)">Add</button>
+                </div>
+                @if (etLoading)
+                {
+                    <p class="et-empty">Loading...</p>
+                }
+                @if (!string.IsNullOrEmpty(etError))
+                {
+                    <div class="alert-error">@etError</div>
+                }
+                @if (entityTypes.Count == 0)
+                {
+                    <p class="et-empty">No entity types yet. Add one above.</p>
+                }
+                else
+                {
+                    <div class="et-list">
+                        @foreach (var et in entityTypes)
+                        {
+                            <div class="et-row">
+                                @if (etEditingId == et.Id)
+                                {
+                                    <input class="form-control et-edit-input" @bind="etEditName" />
+                                    <button class="btn-save btn-sm" @onclick="() => SaveEntityTypeEdit()">Save</button>
+                                    <button class="btn-cancel btn-sm" @onclick="CancelEntityTypeEdit">Cancel</button>
+                                }
+                                else
+                                {
+                                    <span class="et-name">@et.Name</span>
+                                    <span class="status-badge @(et.IsActive ? "status-active" : "status-inactive")">
+                                        @(et.IsActive ? "Active" : "Inactive")
+                                    </span>
+                                    <div class="et-actions">
+                                        <button class="btn-icon btn-edit" @onclick="() => StartEntityTypeEdit(et)" title="Edit">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                            </svg>
+                                        </button>
+                                        <button class="btn-icon @(et.IsActive ? "btn-deactivate" : "btn-activate")"
+                                                @onclick="() => ToggleEntityTypeStatus(et)"
+                                                title="@(et.IsActive ? "Deactivate" : "Activate")">
+                                            @if (et.IsActive)
+                                            {
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <circle cx="12" cy="12" r="10" />
+                                                    <line x1="8" x2="16" y1="12" y2="12" />
+                                                </svg>
+                                            }
+                                            else
+                                            {
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <circle cx="12" cy="12" r="10" />
+                                                    <line x1="12" x2="12" y1="8" y2="16" />
+                                                    <line x1="8" x2="16" y1="12" y2="12" />
+                                                </svg>
+                                            }
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@if (showToast)
+{
+    <div class="toast-box toast-@toastType">@toastMessage</div>
+}
+
+<style>
+    .content-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.5rem;
+    }
+
+    .content-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1e1b4b;
+        margin: 0;
+    }
+
+    .content-subtitle {
+        color: #6b7280;
+        font-size: 0.875rem;
+        margin: 0;
+    }
+
+    .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .export-group {
+        display: flex;
+        gap: 0.4rem;
+        align-items: center;
+    }
+
+    .settings-wrapper {
+        position: relative;
+    }
+
+    .btn-icon-settings {
+        width: 36px;
+        height: 36px;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        background: white;
+        color: #6b7280;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+        .btn-icon-settings:hover, .btn-icon-settings.active {
+            border-color: #7c3aed;
+            color: #7c3aed;
+            background: #faf5ff;
+        }
+
+    .settings-dropdown {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        background: white;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 10px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        min-width: 190px;
+        z-index: 500;
+        overflow: hidden;
+    }
+
+    .settings-item {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        width: 100%;
+        padding: 0.7rem 1rem;
+        background: none;
+        border: none;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #374151;
+        cursor: pointer;
+        text-align: left;
+        transition: background 0.15s;
+    }
+
+        .settings-item:hover {
+            background: #f5f3ff;
+            color: #7c3aed;
+        }
+
+    .btn-export {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: white;
+        border: 1.5px solid #e5e7eb;
+        color: #374151;
+        padding: 0.5rem 0.9rem;
+        border-radius: 8px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+        .btn-export:hover {
+            border-color: #7c3aed;
+            color: #7c3aed;
+            background: #faf5ff;
+        }
+
+    .btn-add {
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        color: white;
+        border: none;
+        padding: 0.6rem 1.25rem;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.2s;
+        white-space: nowrap;
+    }
+
+        .btn-add:hover {
+            opacity: 0.9;
+        }
+
+    .loading-state, .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: #6b7280;
+    }
+
+    .empty-icon {
+        font-size: 3rem;
+        display: block;
+        margin-bottom: 1rem;
+    }
+
+    .empty-state h5 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1e1b4b;
+        margin: 0 0 0.5rem;
+    }
+
+    .empty-state p {
+        font-size: 0.875rem;
+        margin: 0;
+    }
+
+    .table-wrapper {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        overflow-x: auto;
+    }
+
+    .entity-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+    }
+
+        .entity-table thead tr {
+            background: #f8f7ff;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .entity-table th {
+            padding: 0.85rem 1.1rem;
+            text-align: left;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            white-space: nowrap;
+        }
+
+        .entity-table td {
+            padding: 0.85rem 1.1rem;
+            border-bottom: 1px solid #f3f4f6;
+            color: #1f2937;
+            vertical-align: middle;
+        }
+
+        .entity-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .entity-table tbody tr:hover {
+            background: #faf9ff;
+        }
+
+    .col-num {
+        width: 48px;
+    }
+
+    .col-actions {
+        width: 90px;
+    }
+
+    .text-muted {
+        color: #9ca3af !important;
+        font-size: 0.82rem;
+    }
+
+    .type-badge {
+        background: #ede9fe;
+        color: #5b21b6;
+        padding: 0.2rem 0.65rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .entity-name-cell {
+        font-weight: 500;
+        color: #1e1b4b;
+    }
+
+    .entity-code {
+        background: #f3f4f6;
+        color: #374151;
+        padding: 0.15rem 0.5rem;
+        border-radius: 5px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+    }
+
+    .status-badge {
+        padding: 0.2rem 0.65rem;
+        border-radius: 20px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .status-active {
+        background: #f0fdf4;
+        color: #16a34a;
+    }
+
+    .status-inactive {
+        background: #f3f4f6;
+        color: #9ca3af;
+    }
+
+    .btn-icon {
+        width: 30px;
+        height: 30px;
+        border: none;
+        border-radius: 7px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s;
+        margin-right: 2px;
+    }
+
+    .btn-edit {
+        background: #eff6ff;
+        color: #2563eb;
+    }
+
+        .btn-edit:hover {
+            background: #dbeafe;
+        }
+
+    .btn-delete {
+        background: #fef2f2;
+        color: #dc2626;
+    }
+
+        .btn-delete:hover {
+            background: #fecaca;
+        }
+
+    .btn-deactivate {
+        background: #fef9c3;
+        color: #a16207;
+    }
+
+        .btn-deactivate:hover {
+            background: #fef08a;
+        }
+
+    .btn-activate {
+        background: #f0fdf4;
+        color: #16a34a;
+    }
+
+        .btn-activate:hover {
+            background: #dcfce7;
+        }
+
+    .pagination-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.25rem;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .page-size-group {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .page-size-label {
+        font-size: 0.8rem;
+        color: #6b7280;
+        white-space: nowrap;
+    }
+
+    .page-size-btn {
+        padding: 0.3rem 0.7rem;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 6px;
+        background: white;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #6b7280;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+
+        .page-size-btn:hover {
+            border-color: #7c3aed;
+            color: #7c3aed;
+        }
+
+        .page-size-btn.active {
+            background: #7c3aed;
+            color: white;
+            border-color: #7c3aed;
+        }
+
+    .page-nav {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .page-info {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-right: 0.5rem;
+        white-space: nowrap;
+    }
+
+    .page-btn {
+        width: 32px;
+        height: 32px;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 7px;
+        background: white;
+        font-size: 1rem;
+        color: #374151;
+        cursor: pointer;
+        transition: all 0.15s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .page-btn:hover:not(:disabled) {
+            border-color: #7c3aed;
+            color: #7c3aed;
+        }
+
+        .page-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+    .page-current {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #374151;
+        padding: 0 0.4rem;
+        white-space: nowrap;
+    }
+
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+
+    .modal-box {
+        background: white;
+        border-radius: 16px;
+        width: 100%;
+        max-width: 520px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    }
+
+    .modal-box-wide {
+        max-width: 560px;
+    }
+
+    .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+        .modal-header h5 {
+            margin: 0;
+            font-weight: 700;
+            color: #1e1b4b;
+            font-size: 1rem;
+        }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.1rem;
+        cursor: pointer;
+        color: #6b7280;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+    }
+
+        .modal-close:hover {
+            background: #f3f4f6;
+        }
+
+    .modal-body {
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .alert-error {
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        padding: 0.65rem 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .field-row {
+        display: flex;
+        gap: 1rem;
+    }
+
+        .field-row .field-group {
+            flex: 1;
+        }
+
+    .field-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+        .field-group label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: #374151;
+        }
+
+    .required {
+        color: #dc2626;
+    }
+
+    .form-control {
+        border-radius: 8px;
+        border: 1.5px solid #e5e7eb;
+        padding: 0.6rem 0.9rem;
+        font-size: 0.9rem;
+        outline: none;
+        font-family: inherit;
+        transition: border-color 0.2s;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+        .form-control:focus {
+            border-color: #7c3aed;
+        }
+
+    .toggle-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+        font-size: 0.875rem !important;
+        font-weight: 600 !important;
+        letter-spacing: 0 !important;
+        color: #374151 !important;
+    }
+
+        .toggle-label input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #7c3aed;
+            cursor: pointer;
+        }
+
+    .modal-footer-btns {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        padding-top: 0.25rem;
+    }
+
+    .btn-cancel {
+        background: white;
+        border: 1.5px solid #e5e7eb;
+        color: #6b7280;
+        padding: 0.55rem 1.1rem;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .btn-cancel:hover {
+            background: #f9fafb;
+        }
+
+    .btn-save {
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
+        color: white;
+        border: none;
+        padding: 0.55rem 1.25rem;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.2s;
+    }
+
+        .btn-save:hover:not(:disabled) {
+            opacity: 0.9;
+        }
+
+        .btn-save:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+    .btn-sm {
+        padding: 0.35rem 0.75rem !important;
+        font-size: 0.8rem !important;
+    }
+
+    .et-add-row {
+        display: flex;
+        gap: 0.6rem;
+        align-items: center;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+        .et-add-row .form-control {
+            flex: 1;
+        }
+
+    .et-empty {
+        color: #9ca3af;
+        font-size: 0.875rem;
+        text-align: center;
+        padding: 1rem 0;
+        margin: 0;
+    }
+
+    .et-list {
+        display: flex;
+        flex-direction: column;
+        margin-top: 0.5rem;
+    }
+
+    .et-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.65rem 0;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+        .et-row:last-child {
+            border-bottom: none;
+        }
+
+    .et-name {
+        flex: 1;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: #1e1b4b;
+    }
+
+    .et-edit-input {
+        flex: 1;
+    }
+
+    .et-actions {
+        display: flex;
+        gap: 0.3rem;
+        margin-left: auto;
+    }
+
+    .toast-box {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        padding: 0.875rem 1.5rem;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        z-index: 9999;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+
+    .toast-success {
+        background: #f0fdf4;
+        color: #16a34a;
+        border: 1px solid #bbf7d0;
+    }
+
+    .toast-error {
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+    }
+</style>
+
+@code {
+    List<EntityDto> allEntities = new();
+    bool isLoading = true, showModal = false, isEditing = false, isSaving = false, showToast = false;
+    string toastMessage = "", toastType = "", modalError = "";
+    string formName = "", formEntityType = "", formEntityCode = "";
+    bool formIsActive = true;
+    int editingId = 0;
+
+    int pageNumber = 1;
+    int pageSize = 50;
+    int[] pageSizeOptions = { 50, 100, 200 };
+
+    int totalItems => allEntities.Count;
+    int TotalPages => Math.Max(1, (int)Math.Ceiling((double)totalItems / pageSize));
+    IEnumerable<EntityDto> PagedEntities => allEntities.Skip((pageNumber - 1) * pageSize).Take(pageSize);
+
+    // Settings
+    bool showSettingsMenu = false;
+    void ToggleSettingsMenu() => showSettingsMenu = !showSettingsMenu;
+
+    // Entity Types
+    List<EntityTypeItem> entityTypes = new();
+    bool showEntityTypeModal = false;
+    bool etLoading = false;
+    string newEntityTypeName = "";
+    string etError = "";
+    int etEditingId = 0;
+    string etEditName = "";
+
+    async Task OpenEntityTypeModal()
+    {
+        showSettingsMenu = false;
+        showEntityTypeModal = true;
+        etError = "";
+        await LoadEntityTypes();
+    }
+
+    void CloseEntityTypeModal() { showEntityTypeModal = false; etError = ""; newEntityTypeName = ""; CancelEntityTypeEdit(); }
+
+    async Task LoadEntityTypes()
+    {
+        etLoading = true;
+        etError = "";
+        try
+        {
+            var result = await Http.CreateClient("API").GetFromJsonAsync<List<EntityTypeItem>>("api/entitytype");
+            entityTypes = result ?? new();
+        }
+        catch (Exception ex)
+        {
+            etError = "Failed to load entity types: " + ex.Message;
+            entityTypes = new();
+        }
+        finally { etLoading = false; }
+    }
+
+    async Task AddEntityType()
+    {
+        var name = newEntityTypeName.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+        etError = "";
+        try
+        {
+            var response = await Http.CreateClient("API").PostAsJsonAsync("api/entitytype", new { Name = name });
+            if (response.IsSuccessStatusCode)
+            {
+                newEntityTypeName = "";
+                await LoadEntityTypes();
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                try { etError = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? "Failed to add."; }
+                catch { etError = $"Failed to add. Status: {(int)response.StatusCode}"; }
+            }
+        }
+        catch (Exception ex) { etError = "Error: " + ex.Message; }
+    }
+
+    void StartEntityTypeEdit(EntityTypeItem et) { etEditingId = et.Id; etEditName = et.Name; etError = ""; }
+    void CancelEntityTypeEdit() { etEditingId = 0; etEditName = ""; }
+
+    async Task SaveEntityTypeEdit()
+    {
+        var name = etEditName.Trim();
+        if (string.IsNullOrWhiteSpace(name)) { etError = "Name cannot be empty."; return; }
+        etError = "";
+        try
+        {
+            var response = await Http.CreateClient("API").PutAsJsonAsync($"api/entitytype/{etEditingId}", new { Name = name });
+            if (response.IsSuccessStatusCode) { CancelEntityTypeEdit(); await LoadEntityTypes(); }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                try { etError = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? "Failed to update."; }
+                catch { etError = $"Failed to update. Status: {(int)response.StatusCode}"; }
+            }
+        }
+        catch (Exception ex) { etError = "Error: " + ex.Message; }
+    }
+
+    async Task ToggleEntityTypeStatus(EntityTypeItem et)
+    {
+        try
+        {
+            var content = new StringContent(
+                System.Text.Json.JsonSerializer.Serialize(new { IsActive = !et.IsActive }),
+                System.Text.Encoding.UTF8, "application/json");
+            var response = await Http.CreateClient("API").PatchAsync($"api/entitytype/{et.Id}/status", content);
+            if (response.IsSuccessStatusCode) await LoadEntityTypes();
+            else ShowToast("Failed to update status", "error");
+        }
+        catch (Exception ex) { ShowToast("Error: " + ex.Message, "error"); }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AuthService.InitializeAsync();
+        if (!AuthService.IsAuthenticated) { Navigation.NavigateTo("/login"); return; }
+        if (!AuthService.IsSuperAdmin() && !AuthService.HasRole("Admin"))
+        { Navigation.NavigateTo("/tickets"); return; }
+        await Task.WhenAll(LoadEntities(), LoadEntityTypes());
+    }
+
+    async Task LoadEntities()
+    {
+        isLoading = true;
+        try
+        {
+            var client = Http.CreateClient("API");
+            var result = await client.GetFromJsonAsync<List<EntityDto>>("api/entity");
+            allEntities = result ?? new();
+        }
+        catch (Exception ex) { allEntities = new(); ShowToast("Failed to load entities: " + ex.Message, "error"); }
+        finally { isLoading = false; }
+    }
+
+    void SetPageSize(int size) { pageSize = size; pageNumber = 1; }
+    void FirstPage() => pageNumber = 1;
+    void PrevPage() { if (pageNumber > 1) pageNumber--; }
+    void NextPage() { if (pageNumber < TotalPages) pageNumber++; }
+    void LastPage() => pageNumber = TotalPages;
+
+    async Task ExportData(string format)
+    {
+        var headers = new[] { "#", "Entity Type", "Entity Name", "Entity Code", "Status", "Created At" };
+        var rows = allEntities.Select((e, i) => new[]
+        {
+            (i + 1).ToString(), e.EntityType, e.Name, e.EntityCode,
+            e.IsActive ? "Active" : "Inactive",
+            e.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")
+        }).ToList();
+
+        if (format == "csv")
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(string.Join(",", headers.Select(h => $"\"{h}\"")));
+            foreach (var row in rows)
+                sb.AppendLine(string.Join(",", row.Select(c => $"\"{c}\"")));
+            var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(sb.ToString()));
+            await JS.InvokeVoidAsync("eval",
+                $"(function(){{var a=document.createElement('a');a.href='data:text/csv;base64,{base64}';a.download='entities.csv';a.click();}})()");
+        }
+        else
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine(string.Join("\t", headers));
+            foreach (var row in rows)
+                sb.AppendLine(string.Join("\t", row));
+            var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(sb.ToString()));
+            await JS.InvokeVoidAsync("eval",
+                $"(function(){{var a=document.createElement('a');a.href='data:application/vnd.ms-excel;base64,{base64}';a.download='entities.xls';a.click();}})()");
+        }
+        ShowToast($"Exported as {format.ToUpper()}", "success");
+    }
+
+    void OpenAddModal()
+    {
+        isEditing = false; editingId = 0;
+        formEntityType = ""; formName = ""; formEntityCode = "";
+        formIsActive = true; modalError = ""; showModal = true;
+    }
+
+    void OpenEditModal(EntityDto e)
+    {
+        isEditing = true; editingId = e.Id;
+        formEntityType = e.EntityType; formName = e.Name;
+        formEntityCode = e.EntityCode; formIsActive = e.IsActive;
+        modalError = ""; showModal = true;
+    }
+
+    void CloseModal() { showModal = false; modalError = ""; }
+
+    async Task SaveEntity()
+    {
+        modalError = "";
+        if (string.IsNullOrWhiteSpace(formEntityType)) { modalError = "Entity Type is required."; return; }
+        if (string.IsNullOrWhiteSpace(formName)) { modalError = "Entity Name is required."; return; }
+        if (string.IsNullOrWhiteSpace(formEntityCode)) { modalError = "Entity Code is required."; return; }
+
+        isSaving = true;
+        try
+        {
+            var client = Http.CreateClient("API");
+            var dto = new { EntityType = formEntityType.Trim(), Name = formName.Trim(), EntityCode = formEntityCode.Trim().ToUpper(), IsActive = formIsActive };
+            HttpResponseMessage response;
+            if (isEditing)
+                response = await client.PutAsJsonAsync($"api/entity/{editingId}", dto);
+            else
+                response = await client.PostAsJsonAsync("api/entity", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                ShowToast(isEditing ? "Entity updated" : "Entity added", "success");
+                CloseModal();
+                await LoadEntities();
+            }
+            else
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                string msg = "Failed to save entity";
+                try { msg = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? msg; }
+                catch { }
+                modalError = msg;
+            }
+        }
+        catch (Exception ex) { modalError = "Error: " + ex.Message; }
+        finally { isSaving = false; }
+    }
+
+    async Task DeleteEntity(int id)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Delete this entity? This cannot be undone.");
+        if (!confirmed) return;
+        var response = await Http.CreateClient("API").DeleteAsync($"api/entity/{id}");
+        if (response.IsSuccessStatusCode) { ShowToast("Entity deleted", "success"); await LoadEntities(); }
+        else ShowToast("Failed to delete entity", "error");
+    }
+
+    void ShowToast(string msg, string type)
+    {
+        toastMessage = msg; toastType = type; showToast = true; StateHasChanged();
+        _ = Task.Run(async () => { await Task.Delay(3000); showToast = false; await InvokeAsync(StateHasChanged); });
+    }
+
+    public class EntityDto
+    {
+        public int Id { get; set; }
+        public string EntityType { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string EntityCode { get; set; } = "";
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public class EntityTypeItem
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public bool IsActive { get; set; } = true;
+    }
+}

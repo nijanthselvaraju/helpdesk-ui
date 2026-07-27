@@ -10,13 +10,16 @@ builder.Services.AddRazorComponents()
 builder.Services.AddSingleton<SidebarStateService>();
 builder.Services.AddSingleton<AssetService>();
 
-// Register AuthService as singleton so it persists across requests
+// Register AuthService as scoped so it persists per Blazor circuit
 builder.Services.AddScoped<AuthService>();
+
+// Delegating handler that injects the JWT token into every API request
+builder.Services.AddTransient<AuthTokenHandler>();
 
 builder.Services.AddHttpClient("API", client =>
 {
     client.BaseAddress = new Uri("http://localhost:5027/");
-});
+}).AddHttpMessageHandler<AuthTokenHandler>();
 
 var app = builder.Build();
 
@@ -31,7 +34,7 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
-app.UseAntiforgery();   
+app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
