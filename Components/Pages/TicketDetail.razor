@@ -81,10 +81,15 @@
                             <div class="conversation-thread" id="chat-thread">
                                 @if (comments.Count == 0)
                                 {
-                                    <div class="no-comments">No replies yet. Start the conversation below.</div>
+                                    <div class="no-comments">
+                                        <span class="no-comments-icon">💬</span>
+                                        No replies yet. Start the conversation below.
+                                    </div>
                                 }
                                 else
                                 {
+                                    string? lastDateLabel = null;
+
                                     @foreach (var c in comments)
                                     {
                                         var isMe = c.UserId == AuthService.CurrentUser.Id;
@@ -92,65 +97,103 @@
                                         var isRequester = c.UserId == ticket.CreatedByUserId;
                                         var isLong = c.Message?.Length > 300;
                                         var isExpanded = expandedComments.Contains(c.Id);
+                                        var localTime = c.CreatedAt.ToLocalTime();
 
-                                        <div class="comment-bubble @(isMe ? "comment-mine" : "comment-other")">
-                                            <div class="comment-meta">
-                                                <span class="comment-author">
-                                                    @c.UserName
-                                                    @if (isTech)
-                                                    {
-                                                        <span class="role-tag tech-tag">Technician</span>
-                                                    }
-                                                    else if (isRequester)
-                                                    {
+                                        var today = DateTime.Today;
+                                        var msgDate = localTime.Date;
+                                        string dateLabel = msgDate == today ? "Today"
+                                            : msgDate == today.AddDays(-1) ? "Yesterday"
+                                            : localTime.ToString("MMM dd, yyyy");
 
-                                                        <span class="role-tag req-tag">Requester</span>
-                                                    }
-                                                </span>
-                                                <span class="comment-time">@c.CreatedAt.ToLocalTime().ToString("MMM dd, HH:mm")</span>
+                                        @if (dateLabel != lastDateLabel)
+                                        {
+                                            lastDateLabel = dateLabel;
+                                            <div class="date-separator">
+                                                <span class="date-separator-label">@dateLabel</span>
                                             </div>
-                                            @if (!string.IsNullOrEmpty(c.Message))
-                                            {
-                                                <div class="comment-text">
-                                                    @if (isLong && !isExpanded)
-                                                    {
-                                                        @c.Message[..300]
-                                                        <span>... </span>
-                                                        <button class="btn-view-more" @onclick="() => ToggleExpand(c.Id)">View more</button>
-                                                    }
-                                                    else if (isLong && isExpanded)
-                                                    {
-                                                        @c.Message
-                                                        <button class="btn-view-more" @onclick="() => ToggleExpand(c.Id)"> View less</button>
-                                                    }
-                                                    else
-                                                    {
+                                        }
 
-                                                        @c.Message
-                                                    }
+                                        <div class="comment-row @(isMe ? "row-mine" : "row-other")">
+                                            @if (!isMe)
+                                            {
+                                                <div class="avatar-circle" title="@c.UserName">
+                                                    @GetInitials(c.UserName)
                                                 </div>
                                             }
-                                            @if (c.Attachments != null && c.Attachments.Count > 0)
-                                            {
-                                                <div class="comment-attachments">
-                                                    @foreach (var att in c.Attachments)
+                                            <div class="bubble-col @(isMe ? "bubble-col-mine" : "bubble-col-other")">
+                                                @if (!isMe)
+                                                {
+                                                    <div class="bubble-author">
+                                                        @c.UserName
+                                                        @if (isTech)
+                                                        {
+                                                            <span class="role-tag tech-tag">Technician</span>
+                                                        }
+                                                        else if (isRequester)
+                                                        {
+                                                            <span class="role-tag req-tag">Requester</span>
+                                                        }
+                                                    </div>
+                                                }
+                                                <div class="comment-bubble @(isMe ? "comment-mine" : "comment-other")">
+                                                    @if (!string.IsNullOrEmpty(c.Message))
                                                     {
-                                                        @if (att.IsImage)
-                                                        {
-                                                            <img src="@(apiBase + att.Url)" class="attachment-img" alt="@att.FileName"
-                                                                 @onclick="() => OpenLightbox(apiBase + att.Url, att.FileName)" title="Click to enlarge" />
-                                                        }
-                                                        else
-                                                        {
-                                                            <a href="@(apiBase + att.Url)" target="_blank" class="attachment-file">
-                                                                @(att.FileName.EndsWith(".pdf") ? "📄" :
-                                                                  att.FileName.EndsWith(".doc") || att.FileName.EndsWith(".docx") ? "📝" :
-                                                                  att.FileName.EndsWith(".xls") || att.FileName.EndsWith(".xlsx") ? "📊" : "📎")
-                                                                @att.FileName
-                                                            </a>
-                                                        }
+                                                        <div class="comment-text">
+                                                            @if (isLong && !isExpanded)
+                                                            {
+                                                                @c.Message[..300]
+                                                                <span>... </span>
+                                                                <button class="btn-view-more" @onclick="() => ToggleExpand(c.Id)">View more</button>
+                                                            }
+                                                            else if (isLong && isExpanded)
+                                                            {
+                                                                @c.Message
+                                                                <button class="btn-view-more" @onclick="() => ToggleExpand(c.Id)"> View less</button>
+                                                            }
+                                                            else
+                                                            {
+                                                                @c.Message
+                                                            }
+                                                        </div>
+                                                    }
+                                                    @if (c.Attachments != null && c.Attachments.Count > 0)
+                                                    {
+                                                        <div class="comment-attachments">
+                                                            @foreach (var att in c.Attachments)
+                                                            {
+                                                                @if (att.IsImage)
+                                                                {
+                                                                    <img src="@(apiBase + att.Url)" class="attachment-img" alt="@att.FileName"
+                                                                         @onclick="() => OpenLightbox(apiBase + att.Url, att.FileName)" title="Click to enlarge" />
+                                                                }
+                                                                else
+                                                                {
+                                                                    <a href="@(apiBase + att.Url)" target="_blank" class="attachment-file">
+                                                                        @(att.FileName.EndsWith(".pdf") ? "📄" :
+                                                                          att.FileName.EndsWith(".doc") || att.FileName.EndsWith(".docx") ? "📝" :
+                                                                          att.FileName.EndsWith(".xls") || att.FileName.EndsWith(".xlsx") ? "📊" : "📎")
+                                                                        @att.FileName
+                                                                    </a>
+                                                                }
+                                                            }
+                                                        </div>
                                                     }
                                                 </div>
+                                                <div class="comment-timestamp @(isMe ? "timestamp-mine" : "timestamp-other")">
+                                                    @localTime.ToString("HH:mm")
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+
+                                    @if (ticket.Status == "Closed")
+                                    {
+                                        <div class="system-event">
+                                            <span class="system-event-icon">🔒</span>
+                                            <span>This ticket was closed</span>
+                                            @if (ticket.UpdatedAt != null)
+                                            {
+                                                <span class="system-event-time">· @ticket.UpdatedAt.Value.ToLocalTime().ToString("MMM dd, HH:mm")</span>
                                             }
                                         </div>
                                     }
@@ -164,17 +207,6 @@
                             else if (CanReply())
                             {
                                 <div class="reply-box">
-                                    <textarea id="reply-textarea" class="reply-input"
-                                              placeholder="Post a comment..."
-                                              rows="3" value="@newComment"
-                                              @oninput="e => newComment = e.Value?.ToString() ?? string.Empty"
-                                              @onkeydown="HandleReplyKeyDown"></textarea>
-                                    <div class="reply-footer">
-                                        <button class="btn-attach-inline" @onclick="TriggerFileUpload" title="Attach file">📎 Attach</button>
-                                        <button class="btn-save" @onclick="SendComment" disabled="@isSending">
-                                            @(isSending ? "Saving..." : "Save")
-                                        </button>
-                                    </div>
                                     @if (pendingAttachments.Count > 0)
                                     {
                                         <div class="pending-attachments">
@@ -201,6 +233,35 @@
                                             }
                                         </div>
                                     }
+                                    <div class="reply-input-row">
+                                        <textarea id="reply-textarea" class="reply-input"
+                                                  placeholder="Write a reply... (Enter to send, Shift+Enter for new line)"
+                                                  value="@newComment"
+                                                  @oninput="HandleReplyInput"
+                                                  @onkeydown="HandleReplyKeyDown"></textarea>
+                                        <div class="reply-actions">
+                                            <button class="btn-attach-inline" @onclick="TriggerFileUpload" title="Attach file">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" /></svg>
+                                            </button>
+                                            <button class="btn-send" @onclick="SendComment" disabled="@isSending" title="Send">
+                                                @if (isSending)
+                                                {
+                                                    <span class="send-spinner"></span>
+                                                }
+                                                else
+                                                {
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+                                                }
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="reply-hint">
+                                        <span>📎 Paste image or click attach</span>
+                                        @if (newComment.Length > 0)
+                                        {
+                                            <span class="char-count @(newComment.Length > 280 ? "char-warn" : "")">@newComment.Length chars</span>
+                                        }
+                                    </div>
                                 </div>
                             }
                             else
@@ -403,6 +464,25 @@
         const el = document.getElementById(elementId);
         if (el) el.scrollTop = el.scrollHeight;
     };
+    window.autoResizeTextarea = function(id) {
+        const ta = document.getElementById(id);
+        if (!ta) return;
+        ta.style.overflowY = 'hidden';
+        ta.style.height = 'auto';
+        const maxH = 120;
+        if (ta.scrollHeight > maxH) {
+            ta.style.height = maxH + 'px';
+            ta.style.overflowY = 'auto';
+        } else {
+            ta.style.height = ta.scrollHeight + 'px';
+        }
+    };
+    window.resetTextarea = function(id) {
+        const ta = document.getElementById(id);
+        if (!ta) return;
+        ta.style.height = '24px';
+        ta.style.overflowY = 'hidden';
+    };
     window.attachmentHelpers = {
         openPicker: function(dotNetRef) {
             const input = document.createElement('input');
@@ -425,7 +505,7 @@
                     const previewUrl = data.isImage ? 'http://localhost:5027' + data.url : '';
                     await dotNetRef.invokeMethodAsync('OnAttachSuccess', data.fileName, data.url, data.isImage, previewUrl);
                 } else { await dotNetRef.invokeMethodAsync('OnAttachError', data.message || 'Upload failed'); }
-            } catch(e) { await dotNetRef.invokeMethodAsync('OnAttachError', 'Network error'); }
+            } catch (e) { await dotNetRef.invokeMethodAsync('OnAttachError', 'Network error'); }
         },
         setupPaste: function(dotNetRef) {
             document.addEventListener('paste', async function(e) {
@@ -653,11 +733,12 @@
         padding: 1.25rem 1.5rem;
         display: flex;
         flex-direction: column;
-        gap: 1rem;
+        gap: 0.75rem;
         min-height: 300px;
         max-height: 500px;
         overflow-y: auto;
         scroll-behavior: smooth;
+        background: #f8f7ff;
     }
 
         .conversation-thread::-webkit-scrollbar {
@@ -682,63 +763,145 @@
         color: #9ca3af;
         padding: 3rem 1rem;
         font-size: 0.875rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
     }
 
-    .comment-bubble {
-        max-width: 75%;
-        padding: 0.85rem 1.1rem;
-        border-radius: 12px;
+    .no-comments-icon {
+        font-size: 2rem;
+    }
+
+    /* Date separator */
+    .date-separator {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 0.5rem 0;
+    }
+
+        .date-separator::before, .date-separator::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #e5e7eb;
+        }
+
+    .date-separator-label {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        white-space: nowrap;
+        background: #f8f7ff;
+        padding: 0 0.5rem;
+    }
+
+    /* Comment row (flex container for avatar + bubble) */
+    .comment-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 0.6rem;
         animation: fadeIn 0.2s ease;
     }
 
+    .row-mine {
+        justify-content: flex-end;
+    }
+
+    .row-other {
+        justify-content: flex-start;
+    }
+
+    /* Avatar */
+    .avatar-circle {
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #a78bfa, #60a5fa);
+        color: white;
+        font-size: 0.68rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        align-self: flex-end;
+        margin-bottom: 1.25rem;
+    }
+
+    /* Bubble column */
+    .bubble-col {
+        display: flex;
+        flex-direction: column;
+        max-width: 72%;
+        gap: 0.2rem;
+    }
+
+    .bubble-col-mine {
+        align-items: flex-end;
+    }
+
+    .bubble-col-other {
+        align-items: flex-start;
+    }
+
+    .bubble-author {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #6b7280;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding-left: 0.25rem;
+        margin-bottom: 0.1rem;
+    }
+
+    .comment-bubble {
+        padding: 0.75rem 1rem;
+        border-radius: 14px;
+        width: fit-content;
+        max-width: 100%;
+    }
+
     .comment-other {
-        background: #f3f4f6;
-        align-self: flex-start;
+        background: white;
+        border: 1px solid #e5e7eb;
         border-bottom-left-radius: 4px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
 
     .comment-mine {
         background: linear-gradient(135deg, #4f46e5, #7c3aed);
         color: white;
-        align-self: flex-end;
         border-bottom-right-radius: 4px;
     }
 
-    .comment-meta {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
-        margin-bottom: 0.3rem;
-        font-size: 0.78rem;
+    .comment-timestamp {
+        font-size: 0.68rem;
+        color: #9ca3af;
+        padding: 0 0.25rem;
     }
 
-    .comment-other .comment-meta {
-        color: #6b7280;
+    .timestamp-mine {
+        text-align: right;
     }
 
-    .comment-mine .comment-meta {
-        color: rgba(255,255,255,0.8);
-    }
-
-    .comment-author {
-        font-weight: 700;
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-    }
-
-    .comment-time {
-        white-space: nowrap;
+    .timestamp-other {
+        text-align: left;
     }
 
     .comment-text {
         font-size: 0.9rem;
-        line-height: 1.5;
+        line-height: 1.55;
         white-space: pre-wrap;
     }
 
     .role-tag {
-        font-size: 0.65rem;
+        font-size: 0.62rem;
         padding: 0.1rem 0.4rem;
         border-radius: 8px;
         font-weight: 700;
@@ -818,80 +981,157 @@
         }
 
     .comment-other .attachment-file {
-        background: rgba(0,0,0,0.05);
-        border-color: rgba(0,0,0,0.1);
+        background: rgba(0,0,0,0.04);
+        border-color: rgba(0,0,0,0.08);
         color: #374151;
+    }
+
+    /* System event (ticket closed inline) */
+    .system-event {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        font-size: 0.78rem;
+        color: #6b7280;
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        border-radius: 20px;
+        padding: 0.4rem 1rem;
+        align-self: center;
+        margin-top: 0.5rem;
+    }
+
+    .system-event-icon {
+        font-size: 0.85rem;
+    }
+
+    .system-event-time {
+        color: #9ca3af;
     }
 
     /* ── REPLY BOX ── */
     .reply-box {
-        padding: 1rem 1.5rem 1.25rem;
-        border-top: 1px solid #f3f4f6;
+        padding: 0.875rem 1.25rem 1rem;
+        border-top: 1px solid #ede9fe;
+        background: white;
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
     }
 
-    .reply-input {
-        width: 100%;
+    .reply-input-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 0.5rem;
         border: 1.5px solid #e5e7eb;
-        border-radius: 8px;
-        padding: 0.75rem 1rem;
-        font-size: 0.9rem;
-        resize: vertical;
-        outline: none;
-        font-family: inherit;
-        transition: border-color 0.2s;
-        min-height: 80px;
-        box-sizing: border-box;
+        border-radius: 12px;
+        padding: 0.5rem 0.5rem 0.5rem 0.875rem;
+        background: white;
+        transition: border-color 0.2s, box-shadow 0.2s;
     }
 
-        .reply-input:focus {
+        .reply-input-row:focus-within {
             border-color: #7c3aed;
+            box-shadow: 0 0 0 3px rgba(124,58,237,0.08);
         }
 
-    .reply-footer {
+    .reply-input {
+        flex: 1;
+        border: none;
+        outline: none;
+        font-size: 0.9rem;
+        resize: none;
+        font-family: inherit;
+        height: 24px;
+        min-height: 24px;
+        max-height: 120px;
+        line-height: 1.5;
+        background: transparent;
+        color: #1f2937;
+        overflow-y: hidden;
+        overflow-x: hidden;
+        padding: 0;
+    }
+
+    .reply-actions {
         display: flex;
-        justify-content: space-between;
         align-items: center;
+        gap: 0.35rem;
+        flex-shrink: 0;
+        padding-bottom: 2px;
     }
 
     .btn-attach-inline {
         background: none;
-        border: 1px solid #e5e7eb;
-        border-radius: 6px;
-        padding: 0.4rem 0.75rem;
-        font-size: 0.82rem;
-        color: #6b7280;
+        border: none;
+        border-radius: 8px;
+        padding: 0.4rem;
+        color: #9ca3af;
         cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         transition: all 0.15s;
     }
 
         .btn-attach-inline:hover {
             background: #f3f4f6;
-            color: #374151;
+            color: #7c3aed;
         }
 
-    .btn-save {
-        background: #4f46e5;
+    .btn-send {
+        background: linear-gradient(135deg, #4f46e5, #7c3aed);
         color: white;
         border: none;
         border-radius: 8px;
-        padding: 0.5rem 1.5rem;
-        font-size: 0.875rem;
-        font-weight: 600;
+        width: 34px;
+        height: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         cursor: pointer;
-        transition: opacity 0.2s;
+        transition: opacity 0.2s, transform 0.15s;
+        flex-shrink: 0;
     }
 
-        .btn-save:hover:not(:disabled) {
+        .btn-send:hover:not(:disabled) {
             opacity: 0.9;
+            transform: scale(1.05);
         }
 
-        .btn-save:disabled {
-            opacity: 0.6;
+        .btn-send:disabled {
+            opacity: 0.5;
             cursor: not-allowed;
         }
+
+    .send-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        display: inline-block;
+    }
+
+    .reply-hint {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.72rem;
+        color: #9ca3af;
+        padding: 0 0.25rem;
+    }
+
+    .char-count {
+        color: #6b7280;
+    }
+
+    .char-warn {
+        color: #d97706;
+        font-weight: 600;
+    }
 
     .reply-closed {
         padding: 1rem 1.5rem;
@@ -1444,6 +1684,12 @@
             transform: translateY(0);
         }
     }
+
+    @@keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
 </style>
 
 @code {
@@ -1542,6 +1788,12 @@
         return ticket.CreatedByUserId == userId || ticket.AssignedToUserId == userId;
     }
 
+    async Task HandleReplyInput(ChangeEventArgs e)
+    {
+        newComment = e.Value?.ToString() ?? string.Empty;
+        await JS.InvokeVoidAsync("autoResizeTextarea", "reply-textarea");
+    }
+
     async Task HandleReplyKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter" && !e.ShiftKey)
@@ -1585,6 +1837,7 @@
         {
             comments.Add(new CommentDto { Id = 0, TicketId = TicketId, Message = newComment.Trim(), CreatedAt = DateTime.UtcNow, UserId = AuthService.CurrentUser.Id, UserName = AuthService.CurrentUser.Name, Attachments = pendingAttachments.Select(a => new AttachmentDto { FileName = a.FileName, Url = a.Url, IsImage = a.IsImage }).ToList() });
             newComment = ""; pendingAttachments.Clear();
+            await JS.InvokeVoidAsync("resetTextarea", "reply-textarea");
             _ = Task.Run(async () => { await Task.Delay(500); await LoadComments(); await InvokeAsync(StateHasChanged); });
         }
         else ShowToast("Failed to send reply", "error");
@@ -1684,6 +1937,15 @@
     }
 
     string FormatStatus(string s) => s switch { "Open" => "Open", "InProgress" => "In Progress", "Closed" => "Closed", _ => s };
+
+    string GetInitials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            ? $"{parts[0][0]}{parts[1][0]}".ToUpper()
+            : name[..Math.Min(2, name.Length)].ToUpper();
+    }
     public void Dispose() { _pollTimer?.Dispose(); _dotNetRef?.Dispose(); }
 
     public class TicketDetailDto

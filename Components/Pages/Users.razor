@@ -22,7 +22,7 @@
                         <line x1="12" x2="12" y1="3" y2="15" />
                     </svg>
                     Import
-                    <InputFile OnChange="HandleImportFile" accept=".csv" style="display:none" />
+                    <InputFile OnChange="HandleImportFile" accept=".csv,.xlsx" style="display:none" />
                 </label>
                 <button class="btn-create" @onclick="OpenCreateModal">+ New User</button>
             </div>
@@ -278,7 +278,8 @@
                 @if (importRows.Count > 0)
                 {
                     <div class="import-hint">
-                        Required columns: <code>EmployeeCode, FirstName, LastName, Email, Phone, Username, EntityName, Role, Password</code>
+                        Supports <strong>CSV</strong> and <strong>XLSX</strong>. Columns: <code>Employee Code, Employee Name, Entity Name, Email, Phone, Username, Password, Role</code>
+                        <br />Role values: <code>User</code>, <code>Technician</code>, <code>Admin</code>, <code>SuperAdmin</code>. Password min 8 characters.
                     </div>
                     <div class="import-table-wrapper">
                         <table class="import-table">
@@ -1117,70 +1118,176 @@
     void NextPage() { if (pageNumber < TotalPages) pageNumber++; }
     void LastPage() => pageNumber = TotalPages;
 
-    // Import
     async Task HandleImportFile(InputFileChangeEventArgs e)
     {
         importError = ""; importRows = new();
         var file = e.File;
         if (file == null) return;
 
-        if (!file.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+        bool isCsv = file.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
+        bool isXlsx = file.Name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase);
+
+        if (!isCsv && !isXlsx)
         {
-            importError = "Only CSV files are supported.";
+            importError = "Only CSV or XLSX files are supported.";
             showImportModal = true;
             return;
         }
 
         try
         {
-            using var stream = file.OpenReadStream(maxAllowedSize: 2 * 1024 * 1024);
-            using var reader = new System.IO.StreamReader(stream);
-            var lines = new List<string>();
-            while (!reader.EndOfStream)
+            if (isCsv)
             {
-                var line = await reader.ReadLineAsync();
-                if (line != null) lines.Add(line);
-            }
-
-            if (lines.Count < 2) { importError = "CSV must have a header row and at least one data row."; showImportModal = true; return; }
-
-            var headers = lines[0].Split(',').Select(h => h.Trim().ToLower()).ToArray();
-            int Col(string name) => Array.IndexOf(headers, name.ToLower());
-
-            int cEmpCode = Col("employeecode"), cFirst = Col("firstname"), cLast = Col("lastname");
-            int cEmail = Col("email"), cPhone = Col("phone"), cUsername = Col("username");
-            int cEntity = Col("entityname"), cRole = Col("role"), cPass = Col("password");
-
-            for (int i = 1; i < lines.Count; i++)
-            {
-                if (string.IsNullOrWhiteSpace(lines[i])) continue;
-                var cols = lines[i].Split(',');
-                string Get(int idx) => idx >= 0 && idx < cols.Length ? cols[idx].Trim() : "";
-
-                var row = new ImportRow
+                using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+                using var reader = new System.IO.StreamReader(stream);
+                var lines = new List<string>();
+                while (!reader.EndOfStream)
                 {
-                    EmployeeCode = Get(cEmpCode),
-                    FirstName = Get(cFirst),
-                    LastName = Get(cLast),
-                    Email = Get(cEmail),
-                    Phone = Get(cPhone),
-                    Username = Get(cUsername),
-                    EntityName = Get(cEntity),
-                    Role = Get(cRole),
-                    Password = Get(cPass)
-                };
+                    var line = await reader.ReadLineAsync();
+                    if (line != null) lines.Add(line);
+                }
 
-                if (string.IsNullOrWhiteSpace(row.Email)) row.Error = "Email required";
-                else if (string.IsNullOrWhiteSpace(row.Username)) row.Error = "Username required";
-                else if (string.IsNullOrWhiteSpace(row.Password) || row.Password.Length < 8) row.Error = "Password min 8 chars";
-                else if (!string.IsNullOrWhiteSpace(row.Role) && !RoleIds.ContainsKey(row.Role)) row.Error = $"Invalid role '{row.Role}'";
+                if (lines.Count < 2) { importError = "CSV must have a header row and at least one data row."; showImportModal = true; return; }
 
-                importRows.Add(row);
+                // Normalize headers: remove spaces, lowercase
+                var headers = lines[0].Split(',').Select(h => h.Trim().ToLower().Replace(" ", "")).ToArray();
+                int Col(params string[] names)
+                {
+                    foreach (var n in names)
+                    {
+                        var idx = Array.IndexOf(headers, n.ToLower().Replace(" ", ""));
+                        if (idx >= 0) return idx;
+                    }
+                    return -1;
+                }
+
+                int cEmpCode = Col("employeecode", "employecode", "empcode");
+                int cName = Col("employeename", "employname", "name");
+                int cFirst = Col("firstname");
+                int cLast = Col("lastname");
+                int cEmail = Col("email");
+                int cPhone = Col("phone", "phonenumber");
+                int cUsername = Col("username");
+                int cEntity = Col("entityname", "entity");
+                int cRole = Col("role");
+                int cPass = Col("password");
+
+                for (int i = 1; i < lines.Count; i++)
+                {
+                    if (string.IsNullOrWhiteSpace(lines[i])) continue;
+                    var cols = lines[i].Split(',');
+                    string Get(int idx) => idx >= 0 && idx < cols.Length ? cols[idx].Trim() : "";
+
+                    string firstName = "", lastName = "";
+                    if (cFirst >= 0 || cLast >= 0)
+                    {
+                        firstName = Get(cFirst);
+                        lastName = Get(cLast);
+                    }
+                    else if (cName >= 0)
+                    {
+                        var parts = Get(cName).Split(' ', 2);
+                        firstName = parts[0];
+                        lastName = parts.Length > 1 ? parts[1] : "";
+                    }
+
+                    importRows.Add(ParseAndValidateRow(
+                        Get(cEmpCode), firstName, lastName,
+                        Get(cEmail), Get(cPhone), Get(cUsername),
+                        Get(cEntity), Get(cRole), Get(cPass)));
+                }
+            }
+            else // XLSX
+            {
+                using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+                var ms = new System.IO.MemoryStream();
+                await stream.CopyToAsync(ms);
+                ms.Position = 0;
+
+                var content = new MultipartFormDataContent();
+                content.Add(new ByteArrayContent(ms.ToArray()), "file", file.Name);
+
+                var client = Http.CreateClient("API");
+                var response = await client.PostAsync("api/users/parse-xlsx", content);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    importError = "Failed to parse XLSX file.";
+                    showImportModal = true;
+                    return;
+                }
+
+                var rows = await response.Content.ReadFromJsonAsync<List<XlsxRowDto>>();
+                if (rows == null || rows.Count == 0)
+                {
+                    importError = "No data rows found in the XLSX file.";
+                    showImportModal = true;
+                    return;
+                }
+
+                foreach (var row in rows)
+                {
+                    string firstName = "", lastName = "";
+                    if (!string.IsNullOrWhiteSpace(row.FirstName) || !string.IsNullOrWhiteSpace(row.LastName))
+                    {
+                        firstName = row.FirstName ?? "";
+                        lastName = row.LastName ?? "";
+                    }
+                    else if (!string.IsNullOrWhiteSpace(row.EmployeeName))
+                    {
+                        var parts = row.EmployeeName.Split(' ', 2);
+                        firstName = parts[0];
+                        lastName = parts.Length > 1 ? parts[1] : "";
+                    }
+
+                    importRows.Add(ParseAndValidateRow(
+                        row.EmployeeCode ?? "", firstName, lastName,
+                        row.Email ?? "", row.Phone ?? "", row.Username ?? "",
+                        row.EntityName ?? "", row.Role ?? "", row.Password ?? ""));
+                }
             }
 
             showImportModal = true;
         }
         catch (Exception ex) { importError = "Parse error: " + ex.Message; showImportModal = true; }
+    }
+
+    ImportRow ParseAndValidateRow(string empCode, string firstName, string lastName,
+        string email, string phone, string username, string entityName, string role, string password)
+    {
+        var row = new ImportRow
+        {
+            EmployeeCode = empCode,
+            FirstName = firstName,
+            LastName = lastName,
+            Email = email,
+            Phone = phone,
+            Username = username,
+            EntityName = entityName,
+            Role = role,
+            Password = password
+        };
+
+        if (string.IsNullOrWhiteSpace(row.Email)) row.Error = "Email required";
+        else if (string.IsNullOrWhiteSpace(row.Username)) row.Error = "Username required";
+        else if (string.IsNullOrWhiteSpace(row.Password) || row.Password.Length < 8) row.Error = "Password min 8 chars";
+        else if (!string.IsNullOrWhiteSpace(row.Role) && !RoleIds.ContainsKey(row.Role)) row.Error = $"Invalid role '{row.Role}'";
+
+        return row;
+    }
+
+    public class XlsxRowDto
+    {
+        public string? EmployeeCode { get; set; }
+        public string? EmployeeName { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+        public string? Username { get; set; }
+        public string? EntityName { get; set; }
+        public string? Role { get; set; }
+        public string? Password { get; set; }
     }
 
     async Task RunImport()

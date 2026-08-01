@@ -16,12 +16,30 @@
                 <h1 class="content-title">Tickets</h1>
                 <p class="content-subtitle">@totalItems ticket@(totalItems == 1 ? "" : "s") found</p>
             </div>
-            @if (AuthService.HasPermission("CanCreateTicket"))
-            {
-                <a href="/tickets/create" class="btn-create">
-                    <i class="bi bi-plus-lg"></i> Create New Ticket
-                </a>
-            }
+            <div style="display:flex;gap:0.6rem;align-items:center;">
+                <button class="btn-export-xlsx" @onclick="ExportXlsx" disabled="@isExporting">
+                    @if (isExporting)
+                    {
+                        <span class="export-spinner"></span>
+                        <span>Exporting...</span>
+                    }
+                    else
+                    {
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" x2="12" y1="15" y2="3" />
+                        </svg>
+                        <span>Export XLSX</span>
+                    }
+                </button>
+                @if (AuthService.HasPermission("CanCreateTicket"))
+                {
+                    <a href="/tickets/create" class="btn-create">
+                        <i class="bi bi-plus-lg"></i> Create New Ticket
+                    </a>
+                }
+            </div>
         </div>
 
         <!-- Filter Bar -->
@@ -47,8 +65,8 @@
                 <option value="High">High</option>
             </select>
             <div class="filter-date-group" style="position:relative;">
-                <div class="date-range-input" @onclick="ToggleDatePicker">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#9ca3af;flex-shrink:0;">
+                <button class="date-range-btn" @onclick="ToggleDatePicker">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
                         <line x1="16" x2="16" y1="2" y2="6" />
                         <line x1="8" x2="8" y1="2" y2="6" />
@@ -56,20 +74,17 @@
                     </svg>
                     @if (dateFrom.HasValue && dateTo.HasValue)
                     {
-                        <span class="date-range-text">@dateFrom.Value.ToString("dd/MM/yyyy") to @dateTo.Value.ToString("dd/MM/yyyy")</span>
-                        <button class="date-clear-btn" @onclick:stopPropagation="true" @onclick='() => ApplyPreset("clear")'>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                        </button>
+                        <span>@dateFrom.Value.ToString("dd/MM/yyyy") to @dateTo.Value.ToString("dd/MM/yyyy")</span>
                     }
                     else if (dateFrom.HasValue)
                     {
-                        <span class="date-range-text">From @dateFrom.Value.ToString("dd/MM/yyyy")</span>
+                        <span>From @dateFrom.Value.ToString("dd/MM/yyyy")</span>
                     }
                     else
                     {
                         <span class="date-placeholder">Date Range</span>
                     }
-                </div>
+                </button>
 
                 @if (showDatePicker)
                 {
@@ -403,22 +418,21 @@
         position: relative;
     }
 
-    /* Input-style date range trigger — matches Image 1 */
     .date-range-input {
         display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.4rem;
         border: 1.5px solid #e5e7eb;
         border-radius: 8px;
-        padding: 0.4rem 0.85rem;
-        font-size: 0.875rem;
+        padding: 0.38rem 0.7rem;
+        font-size: 0.8rem;
         color: #374151;
         background: white;
         cursor: pointer;
         outline: none;
         transition: border-color 0.15s;
         white-space: nowrap;
-        min-width: 180px;
+        min-width: 150px;
         user-select: none;
     }
 
@@ -426,16 +440,36 @@
             border-color: #6366f1;
         }
 
+    .date-range-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 0.38rem 0.7rem;
+        font-size: 0.8rem;
+        color: #374151;
+        background: white;
+        cursor: pointer;
+        outline: none;
+        transition: border-color 0.15s;
+        white-space: nowrap;
+        font-family: inherit;
+    }
+
+        .date-range-btn:hover {
+            border-color: #6366f1;
+        }
+
     .date-range-text {
         flex: 1;
-        font-size: 0.875rem;
+        font-size: 0.8rem;
         color: #374151;
     }
 
     .date-placeholder {
-        flex: 1;
         color: #9ca3af;
-        font-size: 0.875rem;
+        font-size: 0.8rem;
     }
 
     .date-clear-btn {
@@ -446,7 +480,6 @@
         color: #9ca3af;
         display: flex;
         align-items: center;
-        border-radius: 4px;
         transition: color 0.15s;
     }
 
@@ -462,33 +495,32 @@
 
     .date-picker-panel {
         position: absolute;
-        top: calc(100% + 6px);
+        top: calc(100% + 5px);
         right: 0;
         background: white;
         border: 1px solid #e5e7eb;
-        border-radius: 12px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+        border-radius: 10px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.1);
         z-index: 1001;
-        padding: 1.25rem;
-        min-width: 640px;
+        padding: 0.75rem;
+        width: 440px;
     }
 
-    /* Presets — Image 1 style: bordered pills, Clear = plain red text */
     .date-presets {
         display: flex;
-        gap: 0.5rem;
-        margin-bottom: 1rem;
-        padding-bottom: 0.85rem;
+        gap: 0.35rem;
+        margin-bottom: 0.65rem;
+        padding-bottom: 0.6rem;
         border-bottom: 1px solid #f3f4f6;
         align-items: center;
     }
 
     .preset-btn {
-        padding: 0.3rem 0.85rem;
+        padding: 0.2rem 0.6rem;
         border: 1.5px solid #d1d5db;
         border-radius: 20px;
         background: white;
-        font-size: 0.82rem;
+        font-size: 0.73rem;
         font-weight: 500;
         color: #374151;
         cursor: pointer;
@@ -502,42 +534,40 @@
             background: #f5f3ff;
         }
 
-    /* Clear = plain red text, no border */
     .preset-clear {
         border: none;
         background: none;
         color: #ef4444;
         font-weight: 600;
-        padding: 0.3rem 0.5rem;
+        font-size: 0.73rem;
+        padding: 0.2rem 0.3rem;
+        cursor: pointer;
+        font-family: inherit;
     }
 
         .preset-clear:hover {
             color: #b91c1c;
-            background: none;
-            border: none;
         }
 
-    /* Dual calendars */
     .dual-calendars {
         display: flex;
-        gap: 2rem;
+        gap: 0.75rem;
     }
 
     .calendar {
         flex: 1;
-        min-width: 260px;
     }
 
     .cal-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 0.75rem;
+        margin-bottom: 0.4rem;
     }
 
     .cal-title {
         font-weight: 700;
-        font-size: 1rem;
+        font-size: 0.8rem;
         color: #111827;
         flex: 1;
         text-align: center;
@@ -548,10 +578,10 @@
         border: none;
         cursor: pointer;
         color: #6b7280;
-        font-size: 1.1rem;
-        width: 28px;
-        height: 28px;
-        border-radius: 6px;
+        font-size: 0.85rem;
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -568,17 +598,17 @@
     .cal-grid {
         display: grid;
         grid-template-columns: repeat(7, 1fr);
-        gap: 3px;
+        gap: 1px;
     }
 
     .cal-dow {
         text-align: center;
-        font-size: 0.72rem;
+        font-size: 0.62rem;
         font-weight: 700;
         color: #9ca3af;
-        padding: 0.3rem 0;
+        padding: 0.15rem 0;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.02em;
     }
 
     .cal-day {
@@ -588,9 +618,9 @@
         border-radius: 50%;
         background: none;
         cursor: pointer;
-        font-size: 0.875rem;
+        font-size: 0.72rem;
         color: #111827;
-        transition: all 0.12s;
+        transition: all 0.1s;
         font-family: inherit;
         display: flex;
         align-items: center;
@@ -645,30 +675,28 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-top: 1rem;
-        padding-top: 0.85rem;
+        margin-top: 0.6rem;
+        padding-top: 0.6rem;
         border-top: 1px solid #f3f4f6;
     }
 
     .date-range-display {
-        font-size: 0.875rem;
+        font-size: 0.73rem;
         color: #6b7280;
         font-weight: 500;
-        font-family: inherit;
     }
 
     .btn-done {
         background: #4338ca;
         color: white;
         border: none;
-        padding: 0.5rem 1.5rem;
-        border-radius: 8px;
-        font-size: 0.875rem;
+        padding: 0.32rem 0.9rem;
+        border-radius: 6px;
+        font-size: 0.75rem;
         font-weight: 600;
         cursor: pointer;
         transition: background 0.15s;
         font-family: inherit;
-        letter-spacing: 0.01em;
     }
 
         .btn-done:hover {
@@ -711,6 +739,49 @@
         margin: 0;
     }
 
+    .btn-export-xlsx {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: white;
+        border: 1.5px solid #e5e7eb;
+        color: #111827;
+        padding: 0.55rem 1rem;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+        white-space: nowrap;
+        font-family: inherit;
+    }
+
+        .btn-export-xlsx:hover:not(:disabled) {
+            background: #f9fafb;
+            border-color: #d1d5db;
+        }
+
+        .btn-export-xlsx:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+    .export-spinner {
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        border: 2px solid #d1d5db;
+        border-top-color: #374151;
+        animation: spin 0.7s linear infinite;
+        display: inline-block;
+    }
+
+    @@keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
     .btn-create {
         display: inline-flex;
         align-items: center;
@@ -733,6 +804,7 @@
             transform: translateY(-1px);
             color: white;
         }
+
 
     .loading-state, .empty-state {
         text-align: center;
@@ -1077,11 +1149,10 @@
     string search = "", status = "", priority = "";
     DateTime? dateFrom = null, dateTo = null;
 
-    // Date picker state
     bool showDatePicker = false;
     DateTime leftMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
     DateTime rightMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1);
-    bool pickingStart = true; // first click = start, second = end
+    bool pickingStart = true;
 
     void ToggleDatePicker() => showDatePicker = !showDatePicker;
     void CloseDatePicker() => showDatePicker = false;
@@ -1107,10 +1178,7 @@
 
     void SelectDay(DateTime day)
     {
-        if (pickingStart)
-        {
-            dateFrom = day; dateTo = null; pickingStart = false;
-        }
+        if (pickingStart) { dateFrom = day; dateTo = null; pickingStart = false; }
         else
         {
             if (day < dateFrom) { dateTo = dateFrom; dateFrom = day; }
@@ -1154,8 +1222,9 @@
         else if (dateFrom.HasValue && dateTo.HasValue && day.Value.Date > dateFrom.Value.Date && day.Value.Date < dateTo.Value.Date) classes.Add("day-in-range");
         return string.Join(" ", classes);
     }
+
     int pageNumber = 1, pageSize = 10, totalItems = 0;
-    bool isLoading = false, showModal = false, showToast = false;
+    bool isLoading = false, showModal = false, showToast = false, isExporting = false;
     string toastMessage = "", toastType = "";
     int openDropdownId = -1;
     double dropdownTop = 0, dropdownRight = 0;
@@ -1184,13 +1253,62 @@
         await LoadTickets();
     }
 
+    async Task ExportXlsx()
+    {
+        if (isExporting) return;
+        isExporting = true;
+        StateHasChanged();
+        try
+        {
+            bool canViewAll = AuthService.HasPermission("CanViewAllTickets");
+            var url = $"api/ticket/export?search={Uri.EscapeDataString(search)}&status={status}&priority={priority}";
+            if (dateFrom.HasValue) url += $"&dateFrom={dateFrom.Value:yyyy-MM-dd}";
+            if (dateTo.HasValue) url += $"&dateTo={dateTo.Value:yyyy-MM-dd}";
+            if (canViewAll) url += "&viewAll=true";
+            else url += $"&currentUserId={AuthService.CurrentUser.Id}&viewAll=false";
+            var client = Http.CreateClient("API");
+            var response = await client.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                var bytes = await response.Content.ReadAsByteArrayAsync();
+                var fileName = $"Tickets_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+                var base64 = Convert.ToBase64String(bytes);
+                await JSRuntime.InvokeVoidAsync("eval",
+                    $"(function(){{var a=document.createElement('a');a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{base64}';a.download='{fileName}';document.body.appendChild(a);a.click();document.body.removeChild(a);}})()");
+                ShowToast("Export downloaded", "success");
+            }
+            else ShowToast("Export failed", "error");
+        }
+        catch (Exception ex) { ShowToast("Export error: " + ex.Message, "error"); }
+        finally { isExporting = false; StateHasChanged(); }
+    }
+
+    async Task LoadTickets()
+    {
+        isLoading = true; StateHasChanged();
+        try
+        {
+            var client = Http.CreateClient("API");
+            bool canViewAll = AuthService.HasPermission("CanViewAllTickets");
+            var url = $"api/ticket?search={Uri.EscapeDataString(search)}&status={status}&priority={priority}&page={pageNumber}&pageSize={pageSize}";
+            if (dateFrom.HasValue) url += $"&dateFrom={dateFrom.Value:yyyy-MM-dd}";
+            if (dateTo.HasValue) url += $"&dateTo={dateTo.Value:yyyy-MM-dd}";
+            if (canViewAll) url += "&viewAll=true";
+            else url += $"&currentUserId={AuthService.CurrentUser.Id}&viewAll=false";
+            var result = await client.GetFromJsonAsync<TicketResponse>(url);
+            tickets = result?.Data ?? new();
+            totalItems = result?.TotalItems ?? 0;
+        }
+        catch (Exception ex) { tickets = new(); totalItems = 0; ShowToast("Failed to load tickets: " + ex.Message, "error"); }
+        finally { isLoading = false; StateHasChanged(); }
+    }
+
     void ViewTicket(int id) => Navigation.NavigateTo($"/tickets/{id}");
 
     async Task ToggleDropdown(int id)
     {
         if (openDropdownId == id) { CloseDropdown(); return; }
         openDropdownId = id;
-        // Position dropdown near top-right of viewport
         var rect = await JSRuntime.InvokeAsync<BoundingRect>("eval",
             $"(function(){{var el=document.querySelectorAll('.btn-dots')[{tickets.FindIndex(t => t.Id == id)}]; var r=el.getBoundingClientRect(); return {{top:r.bottom,right:window.innerWidth-r.right}};}})()");
         dropdownTop = rect.Top;
@@ -1215,37 +1333,8 @@
         { ShowToast("Please fill in all required fields", "error"); return; }
         var client = Http.CreateClient("API");
         var response = await client.PutAsJsonAsync($"api/ticket/{editTicket.Id}", editTicket);
-        if (response.IsSuccessStatusCode) { ShowToast("Ticket updated ✏️", "success"); CloseModal(); await LoadTickets(); }
+        if (response.IsSuccessStatusCode) { ShowToast("Ticket updated", "success"); CloseModal(); await LoadTickets(); }
         else { var body = await response.Content.ReadAsStringAsync(); string msg = "Failed to update ticket"; try { msg = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? msg; } catch { } ShowToast(msg, "error"); }
-    }
-
-    async Task LoadTickets()
-    {
-        isLoading = true; StateHasChanged();
-        try
-        {
-            var client = Http.CreateClient("API");
-            bool canViewAll = AuthService.HasPermission("CanViewAllTickets");
-            var url = $"api/ticket?search={Uri.EscapeDataString(search)}&status={status}&priority={priority}&page={pageNumber}&pageSize={pageSize}";
-            if (dateFrom.HasValue) url += $"&dateFrom={dateFrom.Value:yyyy-MM-dd}";
-            if (dateTo.HasValue) url += $"&dateTo={dateTo.Value:yyyy-MM-dd}";
-            if (canViewAll) url += "&viewAll=true";
-            else url += $"&currentUserId={AuthService.CurrentUser.Id}&viewAll=false";
-            var result = await client.GetFromJsonAsync<TicketResponse>(url);
-            tickets = result?.Data ?? new();
-            totalItems = result?.TotalItems ?? 0;
-        }
-        catch (Exception ex)
-        {
-            tickets = new();
-            totalItems = 0;
-            ShowToast("Failed to load tickets: " + ex.Message, "error");
-        }
-        finally
-        {
-            isLoading = false;
-            StateHasChanged();
-        }
     }
 
     async Task DeleteTicket(int id)
@@ -1255,7 +1344,7 @@
         if (!confirmed) return;
         var client = Http.CreateClient("API");
         var response = await client.DeleteAsync($"api/ticket/{id}");
-        if (response.IsSuccessStatusCode) { ShowToast("Ticket deleted 🗑️", "success"); await LoadTickets(); }
+        if (response.IsSuccessStatusCode) { ShowToast("Ticket deleted", "success"); await LoadTickets(); }
         else ShowToast("Failed to delete ticket", "error");
     }
 
@@ -1267,7 +1356,7 @@
         var t = tickets.FirstOrDefault(x => x.Id == id);
         if (t == null) return;
         var response = await client.PutAsJsonAsync($"api/ticket/{id}", new { t.Title, t.Description, Status = "Closed", Priority = t.Priority });
-        if (response.IsSuccessStatusCode) { ShowToast("Ticket closed 🔒", "success"); await LoadTickets(); }
+        if (response.IsSuccessStatusCode) { ShowToast("Ticket closed", "success"); await LoadTickets(); }
         else ShowToast("Failed to close ticket", "error");
     }
 
@@ -1276,7 +1365,7 @@
         var client = Http.CreateClient("API");
         var content = new StringContent(System.Text.Json.JsonSerializer.Serialize(new { IsRequester = false }), System.Text.Encoding.UTF8, "application/json");
         var response = await client.PatchAsync($"api/ticket/{id}/reopen", content);
-        if (response.IsSuccessStatusCode) { ShowToast("Ticket reopened ✅", "success"); await LoadTickets(); }
+        if (response.IsSuccessStatusCode) { ShowToast("Ticket reopened", "success"); await LoadTickets(); }
         else ShowToast("Failed to reopen ticket", "error");
     }
 
@@ -1290,7 +1379,6 @@
     }
 
     int GetDaysBetween(DateTime created, DateTime closed) => (int)Math.Ceiling((closed - created).TotalDays);
-
     string FormatStatus(string s) => s switch { "Open" => "Open", "InProgress" => "In Progress", "Closed" => "Closed", _ => s };
 
     public class TicketResponse

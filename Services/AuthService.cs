@@ -1,21 +1,57 @@
-﻿namespace TicketingSystem.UI.Services
+﻿using Microsoft.JSInterop;
+using System.Text.Json;
+
+namespace TicketingSystem.UI.Services
 {
     public class AuthService
     {
+        private readonly IJSRuntime _js;
+
+        public AuthService(IJSRuntime js)
+        {
+            _js = js;
+        }
+
         public event Action? OnAuthStateChanged;
 
         public bool IsAuthenticated { get; private set; }
         public string Token { get; private set; } = "";
         public UserAuthInfo CurrentUser { get; private set; } = new();
 
-        public Task InitializeAsync()
+        public async Task InitializeAsync()
         {
-            // Token lives in memory — already set if user logged in this session
-            IsAuthenticated = !string.IsNullOrEmpty(Token);
-            return Task.CompletedTask;
+            // Already loaded this session — skip
+            if (!string.IsNullOrEmpty(Token))
+            {
+                IsAuthenticated = true;
+                return;
+            }
+
+            // Try rehydrating from localStorage after a page refresh
+            try
+            {
+                var token = await _js.InvokeAsync<string?>("localStorage.getItem", "authToken");
+                var userJson = await _js.InvokeAsync<string?>("localStorage.getItem", "authUser");
+
+                if (!string.IsNullOrEmpty(token) && !string.IsNullOrEmpty(userJson))
+                {
+                    Token = token;
+                    CurrentUser = JsonSerializer.Deserialize<UserAuthInfo>(userJson) ?? new();
+                    IsAuthenticated = true;
+                }
+                else
+                {
+                    IsAuthenticated = false;
+                }
+            }
+            catch
+            {
+                // JS interop not available during prerender — stay unauthenticated
+                IsAuthenticated = false;
+            }
         }
 
-        public Task Login(string token, LoginUserInfo user)
+        public async Task Login(string token, LoginUserInfo user)
         {
             Token = token;
             IsAuthenticated = true;
@@ -29,18 +65,24 @@
                 Permissions = user.Permissions
             };
 
+            // Persist to localStorage so refresh doesn't log the user out
+            await _js.InvokeVoidAsync("localStorage.setItem", "authToken", token);
+            await _js.InvokeVoidAsync("localStorage.setItem", "authUser",
+                JsonSerializer.Serialize(CurrentUser));
+
             OnAuthStateChanged?.Invoke();
-            return Task.CompletedTask;
         }
 
-        public Task Logout()
+        public async Task Logout()
         {
             Token = "";
             IsAuthenticated = false;
             CurrentUser = new();
 
+            await _js.InvokeVoidAsync("localStorage.removeItem", "authToken");
+            await _js.InvokeVoidAsync("localStorage.removeItem", "authUser");
+
             OnAuthStateChanged?.Invoke();
-            return Task.CompletedTask;
         }
 
         public bool HasPermission(string permission) =>
