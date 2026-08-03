@@ -56,6 +56,23 @@
                                 <option value="@cat.Id">@cat.Name</option>
                             }
                         </select>
+                        @if (selectedCategoryId > 0)
+                        {
+                            var selectedCat = categories.FirstOrDefault(c => c.Id == selectedCategoryId);
+                            if (selectedCat != null && selectedCat.ApprovalType != "NoApproval")
+                            {
+                                <div class="approval-hint">
+                                    @if (selectedCat.ApprovalType == "BeforeWork")
+                                    {
+                                        <span>⏳ This request requires <strong>pre-approval</strong> before work begins.</span>
+                                    }
+                                    else
+                                    {
+                                        <span>✅ This ticket requires <strong>sign-off</strong> after work is completed.</span>
+                                    }
+                                </div>
+                            }
+                        }
                     </div>
                 </div>
 
@@ -129,12 +146,12 @@
 
 <script>
     window.createTicketAttachments = {
-        openPicker: function(dotNetRef) {
+        openPicker: function (dotNetRef) {
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = '.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt';
             input.multiple = true;
-            input.onchange = async function() {
+            input.onchange = async function () {
                 for (const file of input.files) {
                     await window.createTicketAttachments.uploadFile(file, dotNetRef);
                 }
@@ -142,7 +159,7 @@
             input.click();
         },
 
-        uploadFile: async function(file, dotNetRef) {
+        uploadFile: async function (file, dotNetRef) {
             if (file.size > 10 * 1024 * 1024) {
                 await dotNetRef.invokeMethodAsync('OnAttachError', 'File too large. Max 10MB.');
                 return;
@@ -161,7 +178,7 @@
                 } else {
                     await dotNetRef.invokeMethodAsync('OnAttachError', data.message || 'Upload failed');
                 }
-            } catch(e) {
+            } catch (e) {
                 await dotNetRef.invokeMethodAsync('OnAttachError', 'Network error during upload');
             }
         }
@@ -366,6 +383,16 @@
             background: #dc2626;
         }
 
+    .approval-hint {
+        background: #fef3c7;
+        border: 1px solid #fde68a;
+        border-radius: 8px;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.82rem;
+        color: #92400e;
+        margin-top: 0.4rem;
+    }
+
     .btn-submit {
         background: #4f46e5;
         color: white;
@@ -524,7 +551,10 @@
         try
         {
             var client = Http.CreateClient("API");
-            var result = await client.GetFromJsonAsync<List<CategoryOption>>("api/category");
+            // Load categories active for the current user's entity
+            var entityId = AuthService.CurrentUser.EntityId;
+            string url = entityId > 0 ? $"api/category/entity/{entityId}" : "api/category";
+            var result = await client.GetFromJsonAsync<List<CategoryOption>>(url);
             categories = result ?? new();
         }
         catch { categories = new(); }
@@ -613,6 +643,7 @@
     {
         public int Id { get; set; }
         public string Name { get; set; } = "";
+        public string ApprovalType { get; set; } = "NoApproval";
     }
 
     public class PendingAttachment

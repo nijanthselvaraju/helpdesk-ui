@@ -11,7 +11,7 @@
         <div class="content-header">
             <div>
                 <h1 class="content-title">Categories</h1>
-                <p class="content-subtitle">Manage ticket categories and their default assignee</p>
+                <p class="content-subtitle">Manage ticket categories, approval workflows and entity assignments</p>
             </div>
             <button class="btn-create" @onclick="OpenCreateModal">➕ New Category</button>
         </div>
@@ -33,8 +33,11 @@
             <div class="cat-table">
                 <div class="table-header">
                     <div>Category</div>
-                    <div>Assigned To</div>
+                    <div>Default Assignee</div>
+                    <div>Approval</div>
+                    <div>Entities</div>
                     <div>Tickets</div>
+                    <div>Status</div>
                     <div>Actions</div>
                 </div>
                 @foreach (var c in categories)
@@ -43,7 +46,9 @@
                         <div>
                             <strong>@c.Name</strong>
                             @if (!string.IsNullOrEmpty(c.Description))
-                            { <div class="cat-desc">@c.Description</div> }
+                            {
+                                <div class="cat-desc">@c.Description</div>
+                            }
                         </div>
                         <div class="assignee-chip">
                             <span class="chip-avatar">@GetInitials(c.AssignedUserName)</span>
@@ -52,10 +57,33 @@
                                 <div class="chip-email">@c.AssignedUserEmail</div>
                             </div>
                         </div>
+                        <div>
+                            <span class="approval-badge approval-@c.ApprovalType.ToLower().Replace(" ", "")">
+                                @(c.ApprovalType == "NoApproval" ? "None" :
+                                  c.ApprovalType == "BeforeWork" ? "Pre-Approval" : "Post-Approval")
+                            </span>
+                        </div>
+                        <div>
+                            @if (c.EntityAssignments != null && c.EntityAssignments.Count > 0)
+                            {
+                                <span class="entity-count" @onclick="() => OpenAssignmentModal(c)" title="Manage entity assignments">
+                                    @c.EntityAssignments.Count(a => a.IsActive) active
+                                </span>
+                            }
+                            else
+                            {
+                                <button class="btn-add-entity" @onclick="() => OpenAssignmentModal(c)">+ Add</button>
+                            }
+                        </div>
                         <div><span class="count-badge">@c.TicketCount</span></div>
+                        <div>
+                            <span class="status-dot @(c.IsActive ? "dot-active" : "dot-inactive")">
+                                @(c.IsActive ? "Active" : "Inactive")
+                            </span>
+                        </div>
                         <div class="row-actions">
-                            <button class="btn-action btn-edit" @onclick="() => OpenEditModal(c)">✏️</button>
-                            <button class="btn-action btn-delete" @onclick="() => DeleteCategory(c.Id)">🗑️</button>
+                            <button class="btn-action btn-edit" @onclick="() => OpenEditModal(c)" title="Edit">✏️</button>
+                            <button class="btn-action btn-delete" @onclick="() => DeleteCategory(c.Id)" title="Delete">🗑️</button>
                         </div>
                     </div>
                 }
@@ -64,6 +92,7 @@
     </ChildContent>
 </AppShell>
 
+@* ── Create / Edit Category Modal ─────────────────────────────────── *@
 @if (showModal)
 {
     <div class="modal-backdrop" @onclick="CloseModal">
@@ -84,15 +113,50 @@
                     <textarea class="form-control" rows="2" @bind="form.Description"></textarea>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label">Assign To <span class="text-danger">*</span></label>
+                    <label class="form-label">Default Assignee <span class="text-danger">*</span></label>
                     <select class="form-select" @bind="form.AssignedUserId">
-                        <option value="0">-- Select user --</option>
+                        <option value="0">-- Select technician --</option>
                         @foreach (var u in allUsers)
                         {
                             <option value="@u.Id">@u.FirstName @u.LastName (@u.Email)</option>
                         }
                     </select>
-                    <small class="text-muted">Tickets auto-assign to this person.</small>
+                    <small class="text-muted">Fallback if no entity-specific assignment exists.</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Approval Type</label>
+                    <select class="form-select" @bind="form.ApprovalType">
+                        <option value="NoApproval">No Approval</option>
+                        <option value="BeforeWork">Before Work (Pre-Approval)</option>
+                        <option value="AfterWork">After Work (Post-Approval)</option>
+                    </select>
+                </div>
+                @if (form.ApprovalType != "NoApproval")
+                {
+                    <div class="mb-3">
+                        <label class="form-label">Default Approver</label>
+                        <select class="form-select" @bind="form.ApproverId">
+                            <option value="0">-- Select approver --</option>
+                            @foreach (var u in allUsers)
+                            {
+                                <option value="@u.Id">@u.FirstName @u.LastName (@u.Email)</option>
+                            }
+                        </select>
+                        <small class="text-muted">Fallback if no entity-specific approver set.</small>
+                    </div>
+                }
+                <div class="mb-3">
+                    <label class="form-label">Status</label>
+                    <div class="toggle-row">
+                        <span>Active</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" @bind="form.IsActive" />
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="text-muted" style="font-size:0.8rem">
+                            @(form.IsActive ? "Visible to all entities" : "Hidden from all entities")
+                        </span>
+                    </div>
                 </div>
                 <div class="d-flex gap-2 justify-content-end">
                     <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
@@ -105,94 +169,604 @@
     </div>
 }
 
+@* ── Entity Assignment Modal ───────────────────────────────────────── *@
+@if (showAssignmentModal && selectedCategory != null)
+{
+    <div class="modal-backdrop" @onclick="CloseAssignmentModal">
+        <div class="modal-box modal-wide" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h5>🏢 Entity Assignments — @selectedCategory.Name</h5>
+                <button class="modal-close" @onclick="CloseAssignmentModal">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted" style="font-size:0.85rem;margin-bottom:1rem;">
+                    Configure which technician handles this category per entity, and who approves it.
+                    Overrides the default assignee for users in that entity.
+                </p>
+
+                @* Existing assignments *@
+                @if (selectedCategory.EntityAssignments?.Count > 0)
+                {
+                    <div class="assignment-list">
+                        @foreach (var a in selectedCategory.EntityAssignments)
+                        {
+                            <div class="assignment-row @(!a.IsActive ? "row-inactive" : "")">
+                                <div class="assignment-entity">
+                                    <span class="entity-badge">🏢</span>
+                                    <strong>@a.EntityName</strong>
+                                </div>
+                                <div class="assignment-tech">
+                                    <span class="chip-avatar small">@GetInitials(a.AssignedUserName)</span>
+                                    <span>@a.AssignedUserName</span>
+                                </div>
+                                <div class="assignment-approver">
+                                    @if (!string.IsNullOrEmpty(a.ApproverName))
+                                    {
+                                        <span class="chip-avatar small approver">@GetInitials(a.ApproverName)</span>
+                                        <span>@a.ApproverName</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" style="font-size:0.8rem">No approver</span>
+                                    }
+                                </div>
+                                <div>
+                                    <span class="status-dot @(a.IsActive ? "dot-active" : "dot-inactive")">
+                                        @(a.IsActive ? "Active" : "Inactive")
+                                    </span>
+                                </div>
+                                <div class="row-actions">
+                                    <button class="btn-action btn-edit" @onclick="() => EditAssignment(a)" title="Edit">✏️</button>
+                                    <button class="btn-action btn-delete" @onclick="() => DeleteAssignment(a.Id)" title="Remove">🗑️</button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @* Add / Edit assignment form *@
+                <div class="add-assignment-form">
+                    <h6>@(editingAssignmentId.HasValue ? "Edit Assignment" : "Add Entity Assignment")</h6>
+                    <div class="assignment-form-grid">
+                        <div>
+                            <label class="form-label">Entity <span class="text-danger">*</span></label>
+                            <select class="form-select" @bind="assignmentForm.EntityId" disabled="@editingAssignmentId.HasValue">
+                                <option value="0">-- Select entity --</option>
+                                @foreach (var e in allEntities)
+                                {
+                                    <option value="@e.Id">@e.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label">Technician <span class="text-danger">*</span></label>
+                            <select class="form-select" @bind="assignmentForm.AssignedUserId">
+                                <option value="0">-- Select technician --</option>
+                                @foreach (var u in allUsers)
+                                {
+                                    <option value="@u.Id">@u.FirstName @u.LastName</option>
+                                }
+                            </select>
+                        </div>
+                        @if (selectedCategory.ApprovalType != "NoApproval")
+                        {
+                            <div>
+                                <label class="form-label">Approver</label>
+                                <select class="form-select" @bind="assignmentForm.ApproverId">
+                                    <option value="0">-- Use category default --</option>
+                                    @foreach (var u in allUsers)
+                                    {
+                                        <option value="@u.Id">@u.FirstName @u.LastName</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+                        <div>
+                            <label class="form-label">Auto-close (days)</label>
+                            <input type="number" class="form-control" min="0" max="90"
+                                   @bind="assignmentForm.AutoCloseAfterDays"
+                                   placeholder="0 = disabled" />
+                            <small class="text-muted">Days before auto-close if no approval action taken (0 = off)</small>
+                        </div>
+                    </div>
+                    <div class="toggle-row" style="margin:0.75rem 0">
+                        <span>Active</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" @bind="assignmentForm.IsActive" />
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="d-flex gap-2">
+                        @if (editingAssignmentId.HasValue)
+                        {
+                            <button class="btn btn-secondary btn-sm" @onclick="CancelEditAssignment">Cancel</button>
+                            <button class="btn btn-primary btn-sm" @onclick="SaveAssignment">Update Assignment</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-primary btn-sm" @onclick="SaveAssignment">➕ Add Assignment</button>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @if (showToast)
 {
     <div class="toast-box toast-@toastType">@toastMessage</div>
 }
 
 <style>
-    .content-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-    .content-title { font-size: 1.5rem; font-weight: 700; color: #1e1b4b; margin: 0; }
-    .content-subtitle { color: #6b7280; font-size: 0.875rem; margin: 0; }
+    .content-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .content-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1e1b4b;
+        margin: 0;
+    }
+
+    .content-subtitle {
+        color: #6b7280;
+        font-size: 0.875rem;
+        margin: 0;
+    }
+
     .btn-create {
         background: linear-gradient(135deg, #059669, #10b981);
-        color: white; border: none; padding: 0.65rem 1.25rem; border-radius: 10px;
-        font-weight: 600; cursor: pointer; font-size: 0.9rem;
+        color: white;
+        border: none;
+        padding: 0.65rem 1.25rem;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        font-size: 0.9rem;
     }
-    .loading-state, .empty-state { text-align: center; padding: 4rem 2rem; color: #6b7280; }
-    .empty-icon { font-size: 3rem; margin-bottom: 1rem; }
 
-    .cat-table { background: white; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow: hidden; }
+    .loading-state, .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: #6b7280;
+    }
+
+    .empty-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+
+    .cat-table {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+
     .table-header {
-        display: grid; grid-template-columns: 2fr 2fr 1fr 1fr;
-        padding: 0.75rem 1.25rem; background: #f8f7ff; font-size: 0.78rem; font-weight: 700;
-        color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid #e5e7eb;
+        display: grid;
+        grid-template-columns: 2fr 2fr 1.2fr 1fr 0.7fr 0.8fr 0.8fr;
+        padding: 0.75rem 1.25rem;
+        background: #f8f7ff;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        border-bottom: 1px solid #e5e7eb;
     }
-    .table-row {
-        display: grid; grid-template-columns: 2fr 2fr 1fr 1fr;
-        padding: 0.9rem 1.25rem; border-bottom: 1px solid #f3f4f6; align-items: center;
-    }
-    .table-row:last-child { border-bottom: none; }
-    .table-row:hover { background: #fafafa; }
-    .cat-desc { font-size: 0.8rem; color: #9ca3af; margin-top: 0.2rem; }
 
-    .assignee-chip { display: flex; align-items: center; gap: 0.5rem; }
-    .chip-avatar {
-        width: 32px; height: 32px;
-        background: linear-gradient(135deg, #7c3aed, #4f46e5);
-        border-radius: 50%; display: flex; align-items: center; justify-content: center;
-        color: white; font-weight: 700; font-size: 0.75rem; flex-shrink: 0;
+    .table-row {
+        display: grid;
+        grid-template-columns: 2fr 2fr 1.2fr 1fr 0.7fr 0.8fr 0.8fr;
+        padding: 0.9rem 1.25rem;
+        border-bottom: 1px solid #f3f4f6;
+        align-items: center;
     }
-    .chip-name { font-size: 0.875rem; font-weight: 600; color: #1f2937; }
-    .chip-email { font-size: 0.75rem; color: #9ca3af; }
+
+        .table-row:last-child {
+            border-bottom: none;
+        }
+
+        .table-row:hover {
+            background: #fafafa;
+        }
+
+    .cat-desc {
+        font-size: 0.8rem;
+        color: #9ca3af;
+        margin-top: 0.2rem;
+    }
+
+    .assignee-chip {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .chip-avatar {
+        width: 32px;
+        height: 32px;
+        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 700;
+        font-size: 0.75rem;
+        flex-shrink: 0;
+    }
+
+        .chip-avatar.small {
+            width: 26px;
+            height: 26px;
+            font-size: 0.65rem;
+        }
+
+        .chip-avatar.approver {
+            background: linear-gradient(135deg, #059669, #10b981);
+        }
+
+    .chip-name {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .chip-email {
+        font-size: 0.75rem;
+        color: #9ca3af;
+    }
+
+    .approval-badge {
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 0.2rem 0.6rem;
+        border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .approval-noapproval {
+        background: #f3f4f6;
+        color: #6b7280;
+    }
+
+    .approval-beforework {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .approval-afterwork {
+        background: #ede9fe;
+        color: #5b21b6;
+    }
+
+    .entity-count {
+        font-size: 0.8rem;
+        color: #4f46e5;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: underline dotted;
+    }
+
+        .entity-count:hover {
+            color: #7c3aed;
+        }
+
+    .btn-add-entity {
+        font-size: 0.75rem;
+        color: #7c3aed;
+        background: #ede9fe;
+        border: none;
+        border-radius: 6px;
+        padding: 0.2rem 0.5rem;
+        cursor: pointer;
+        font-weight: 600;
+    }
+
+        .btn-add-entity:hover {
+            background: #ddd6fe;
+        }
 
     .count-badge {
-        background: #ede9fe; color: #5b21b6;
-        font-weight: 700; padding: 0.25rem 0.65rem; border-radius: 20px; font-size: 0.8rem;
+        background: #ede9fe;
+        color: #5b21b6;
+        font-weight: 700;
+        padding: 0.25rem 0.65rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
     }
 
-    .row-actions { display: flex; gap: 0.4rem; }
+    .status-dot {
+        font-size: 0.78rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+
+        .status-dot::before {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+    .dot-active {
+        color: #16a34a;
+    }
+
+        .dot-active::before {
+            background: #16a34a;
+        }
+
+    .dot-inactive {
+        color: #9ca3af;
+    }
+
+        .dot-inactive::before {
+            background: #9ca3af;
+        }
+
+    .row-actions {
+        display: flex;
+        gap: 0.4rem;
+    }
+
     .btn-action {
-        width: 32px; height: 32px; border: none; border-radius: 8px; cursor: pointer;
-        font-size: 0.9rem; display: flex; align-items: center; justify-content: center;
+        width: 32px;
+        height: 32px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
-    .btn-edit { background: #eff6ff; } .btn-edit:hover { background: #dbeafe; }
-    .btn-delete { background: #fef2f2; } .btn-delete:hover { background: #fee2e2; }
 
-    .modal-backdrop {
-        position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 2000;
-        display: flex; align-items: center; justify-content: center; padding: 1rem;
+    .btn-edit {
+        background: #eff6ff;
     }
-    .modal-box { background: white; border-radius: 16px; width: 100%; max-width: 480px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-    .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid #e5e7eb; }
-    .modal-header h5 { margin: 0; font-weight: 700; color: #1e1b4b; }
-    .modal-close { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #6b7280; width: 32px; height: 32px; border-radius: 8px; }
-    .modal-close:hover { background: #f3f4f6; }
-    .modal-body { padding: 1.5rem; }
+
+        .btn-edit:hover {
+            background: #dbeafe;
+        }
+
+    .btn-delete {
+        background: #fef2f2;
+    }
+
+        .btn-delete:hover {
+            background: #fee2e2;
+        }
+
+    /* Modals */
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+
+    .modal-box {
+        background: white;
+        border-radius: 16px;
+        width: 100%;
+        max-width: 520px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .modal-wide {
+        max-width: 780px;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #e5e7eb;
+        position: sticky;
+        top: 0;
+        background: white;
+        z-index: 1;
+    }
+
+        .modal-header h5 {
+            margin: 0;
+            font-weight: 700;
+            color: #1e1b4b;
+        }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.1rem;
+        cursor: pointer;
+        color: #6b7280;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+    }
+
+        .modal-close:hover {
+            background: #f3f4f6;
+        }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    /* Toggle */
+    .toggle-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 42px;
+        height: 24px;
+    }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+    .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        inset: 0;
+        background: #d1d5db;
+        border-radius: 24px;
+        transition: 0.2s;
+    }
+
+        .toggle-slider::before {
+            position: absolute;
+            content: '';
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.2s;
+        }
+
+    .toggle-switch input:checked + .toggle-slider {
+        background: #4f46e5;
+    }
+
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(18px);
+        }
+
+    /* Assignment modal */
+    .assignment-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .assignment-row {
+        display: grid;
+        grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr 0.8fr;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: #f8f7ff;
+        border-radius: 10px;
+        border: 1px solid #ede9fe;
+    }
+
+        .assignment-row.row-inactive {
+            opacity: 0.6;
+        }
+
+    .assignment-entity {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.875rem;
+    }
+
+    .entity-badge {
+        font-size: 1rem;
+    }
+
+    .assignment-tech, .assignment-approver {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.85rem;
+    }
+
+    .add-assignment-form {
+        background: #fafafa;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-top: 0.5rem;
+    }
+
+        .add-assignment-form h6 {
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: #374151;
+            margin-bottom: 0.75rem;
+        }
+
+    .assignment-form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+    }
 
     .toast-box {
-        position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.875rem 1.5rem; border-radius: 10px;
-        font-weight: 600; font-size: 0.9rem; z-index: 9999; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        padding: 0.875rem 1.5rem;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        z-index: 9999;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
     }
-    .toast-success { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
-    .toast-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+    .toast-success {
+        background: #f0fdf4;
+        color: #16a34a;
+        border: 1px solid #bbf7d0;
+    }
+
+    .toast-error {
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+    }
 </style>
 
 @code {
     List<CategoryDto> categories = new();
     List<UserDto> allUsers = new();
+    List<EntityDto> allEntities = new();
     bool isLoading = true, showModal = false, isEditing = false;
+    bool showAssignmentModal = false;
     bool showToast = false;
     string toastMessage = "", toastType = "";
     CategoryForm form = new();
+    CategoryDto? selectedCategory;
+    AssignmentForm assignmentForm = new();
+    int? editingAssignmentId = null;
 
     protected override async Task OnInitializedAsync()
     {
         await AuthService.InitializeAsync();
         if (!AuthService.IsAuthenticated) { Navigation.NavigateTo("/login"); return; }
         if (!AuthService.HasPermission("CanManageCategories")) { Navigation.NavigateTo("/tickets"); return; }
-        await LoadCategories();
-        await LoadUsers();
+        await Task.WhenAll(LoadCategories(), LoadUsers(), LoadEntities());
     }
 
     async Task LoadCategories()
@@ -209,22 +783,72 @@
         allUsers = await client.GetFromJsonAsync<List<UserDto>>("api/users") ?? new();
     }
 
-    void OpenCreateModal() { isEditing = false; form = new(); showModal = true; }
+    async Task LoadEntities()
+    {
+        var client = Http.CreateClient("API");
+        allEntities = await client.GetFromJsonAsync<List<EntityDto>>("api/entity") ?? new();
+    }
+
+    void OpenCreateModal() { isEditing = false; form = new() { IsActive = true, ApprovalType = "NoApproval" }; showModal = true; }
+
     void OpenEditModal(CategoryDto c)
     {
         isEditing = true;
-        form = new() { Id = c.Id, Name = c.Name, Description = c.Description, AssignedUserId = c.AssignedUserId };
+        form = new()
+        {
+            Id = c.Id,
+            Name = c.Name,
+            Description = c.Description,
+            AssignedUserId = c.AssignedUserId,
+            ApproverId = c.ApproverId ?? 0,
+            ApprovalType = c.ApprovalType,
+            IsActive = c.IsActive
+        };
         showModal = true;
     }
+
     void CloseModal() => showModal = false;
+
+    void OpenAssignmentModal(CategoryDto c)
+    {
+        selectedCategory = c;
+        assignmentForm = new() { IsActive = true };
+        editingAssignmentId = null;
+        showAssignmentModal = true;
+    }
+
+    void CloseAssignmentModal() { showAssignmentModal = false; selectedCategory = null; }
+
+    void EditAssignment(AssignmentDto a)
+    {
+        editingAssignmentId = a.Id;
+        assignmentForm = new()
+        {
+            EntityId = a.EntityId,
+            AssignedUserId = a.AssignedUserId,
+            ApproverId = a.ApproverId ?? 0,
+            IsActive = a.IsActive,
+            AutoCloseAfterDays = a.AutoCloseAfterDays
+        };
+    }
+
+    void CancelEditAssignment() { editingAssignmentId = null; assignmentForm = new() { IsActive = true }; }
 
     async Task SaveCategory()
     {
         if (string.IsNullOrWhiteSpace(form.Name) || form.AssignedUserId == 0)
-        { ShowToast("Please fill name and assignee", "error"); return; }
+        { ShowToast("Please fill name and default assignee", "error"); return; }
 
         var client = Http.CreateClient("API");
-        var dto = new { form.Name, form.Description, form.AssignedUserId };
+        var dto = new
+        {
+            form.Name,
+            form.Description,
+            form.AssignedUserId,
+            ApproverId = form.ApproverId == 0 ? (int?)null : form.ApproverId,
+            form.ApprovalType,
+            form.IsActive
+        };
         var response = isEditing
             ? await client.PutAsJsonAsync($"api/category/{form.Id}", dto)
             : await client.PostAsJsonAsync("api/category", dto);
@@ -234,6 +858,59 @@
         else ShowToast("Failed to save category", "error");
     }
 
+    async Task SaveAssignment()
+    {
+        if (assignmentForm.EntityId == 0 || assignmentForm.AssignedUserId == 0)
+        { ShowToast("Select entity and technician", "error"); return; }
+        if (selectedCategory == null) return;
+
+        var client = Http.CreateClient("API");
+        var dto = new
+        {
+            assignmentForm.EntityId,
+            assignmentForm.AssignedUserId,
+            ApproverId = assignmentForm.ApproverId == 0 ? (int?)null : assignmentForm.ApproverId,
+            assignmentForm.IsActive,
+            assignmentForm.AutoCloseAfterDays
+        };
+
+        System.Net.Http.HttpResponseMessage response;
+        if (editingAssignmentId.HasValue)
+            response = await client.PutAsJsonAsync($"api/category/assignments/{editingAssignmentId.Value}", dto);
+        else
+            response = await client.PostAsJsonAsync($"api/category/{selectedCategory.Id}/assignments", dto);
+
+        if (response.IsSuccessStatusCode)
+        {
+            ShowToast(editingAssignmentId.HasValue ? "Assignment updated" : "Assignment added", "success");
+            CancelEditAssignment();
+            await LoadCategories();
+            // Refresh selected category
+            selectedCategory = categories.FirstOrDefault(c => c.Id == selectedCategory!.Id);
+        }
+        else
+        {
+            var err = await response.Content.ReadAsStringAsync();
+            ShowToast("Failed: " + err, "error");
+        }
+    }
+
+    async Task DeleteAssignment(int id)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Remove this entity assignment?");
+        if (!confirmed) return;
+        var client = Http.CreateClient("API");
+        var response = await client.DeleteAsync($"api/category/assignments/{id}");
+        if (response.IsSuccessStatusCode)
+        {
+            ShowToast("Assignment removed", "success");
+            await LoadCategories();
+            if (selectedCategory != null)
+                selectedCategory = categories.FirstOrDefault(c => c.Id == selectedCategory.Id);
+        }
+        else ShowToast("Failed to remove assignment", "error");
+    }
+
     async Task DeleteCategory(int id)
     {
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Delete this category?");
@@ -241,7 +918,7 @@
         var client = Http.CreateClient("API");
         var response = await client.DeleteAsync($"api/category/{id}");
         if (response.IsSuccessStatusCode) { ShowToast("Deleted", "success"); await LoadCategories(); }
-        else ShowToast("Cannot delete — category has tickets", "error");
+        else ShowToast("Cannot delete — category has tickets. Deactivate it instead.", "error");
     }
 
     string GetInitials(string? name)
@@ -257,7 +934,57 @@
         _ = Task.Run(async () => { await Task.Delay(3000); showToast = false; await InvokeAsync(StateHasChanged); });
     }
 
-    public class CategoryDto { public int Id { get; set; } public string Name { get; set; } = ""; public string? Description { get; set; } public int AssignedUserId { get; set; } public string? AssignedUserName { get; set; } public string? AssignedUserEmail { get; set; } public int TicketCount { get; set; } }
+    // DTOs
+    public class CategoryDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public int AssignedUserId { get; set; }
+        public string? AssignedUserName { get; set; }
+        public string? AssignedUserEmail { get; set; }
+        public int? ApproverId { get; set; }
+        public string? ApproverName { get; set; }
+        public string ApprovalType { get; set; } = "NoApproval";
+        public bool IsActive { get; set; } = true;
+        public int TicketCount { get; set; }
+        public List<AssignmentDto> EntityAssignments { get; set; } = new();
+    }
+
+    public class AssignmentDto
+    {
+        public int Id { get; set; }
+        public int EntityId { get; set; }
+        public string? EntityName { get; set; }
+        public int AssignedUserId { get; set; }
+        public string? AssignedUserName { get; set; }
+        public string? AssignedUserEmail { get; set; }
+        public int? ApproverId { get; set; }
+        public string? ApproverName { get; set; }
+        public bool IsActive { get; set; }
+        public int AutoCloseAfterDays { get; set; }
+    }
+
     public class UserDto { public int Id { get; set; } public string FirstName { get; set; } = ""; public string LastName { get; set; } = ""; public string Email { get; set; } = ""; }
-    public class CategoryForm { public int Id { get; set; } public string Name { get; set; } = ""; public string? Description { get; set; } public int AssignedUserId { get; set; } }
+    public class EntityDto { public int Id { get; set; } public string Name { get; set; } = ""; }
+
+    public class CategoryForm
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public int AssignedUserId { get; set; }
+        public int ApproverId { get; set; }
+        public string ApprovalType { get; set; } = "NoApproval";
+        public bool IsActive { get; set; } = true;
+    }
+
+    public class AssignmentForm
+    {
+        public int EntityId { get; set; }
+        public int AssignedUserId { get; set; }
+        public int ApproverId { get; set; }
+        public bool IsActive { get; set; } = true;
+        public int AutoCloseAfterDays { get; set; } = 0;
+    }
 }

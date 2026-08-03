@@ -61,6 +61,7 @@ namespace TicketingSystem.UI.Services
                 Id = user.Id,
                 Email = user.Email,
                 Name = $"{user.FirstName} {user.LastName}".Trim(),
+                EntityId = user.EntityId,
                 Roles = user.Roles,
                 Permissions = user.Permissions
             };
@@ -102,6 +103,7 @@ namespace TicketingSystem.UI.Services
         public string Email { get; set; } = "";
         public string FirstName { get; set; } = "";
         public string LastName { get; set; } = "";
+        public int EntityId { get; set; }
         public List<string> Roles { get; set; } = new();
         public List<string> Permissions { get; set; } = new();
     }
@@ -112,6 +114,7 @@ namespace TicketingSystem.UI.Services
         public int Id { get; set; }
         public string Email { get; set; } = "";
         public string Name { get; set; } = "";
+        public int EntityId { get; set; }
         public List<string> Roles { get; set; } = new();
         public List<string> Permissions { get; set; } = new();
     }

@@ -113,77 +113,88 @@
                                             </div>
                                         }
 
-                                        <div class="comment-row @(isMe ? "row-mine" : "row-other")">
-                                            @if (!isMe)
-                                            {
-                                                <div class="avatar-circle" title="@c.UserName">
-                                                    @GetInitials(c.UserName)
-                                                </div>
-                                            }
-                                            <div class="bubble-col @(isMe ? "bubble-col-mine" : "bubble-col-other")">
+
+                                        @if (c.IsSystemMessage)
+                                        {
+                                            <div class="system-comment">
+                                                <span>@c.Message</span>
+                                                <span class="system-comment-time">· @localTime.ToString("HH:mm")</span>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <div class="comment-row @(isMe ? "row-mine" : "row-other")">
                                                 @if (!isMe)
                                                 {
-                                                    <div class="bubble-author">
-                                                        @c.UserName
-                                                        @if (isTech)
-                                                        {
-                                                            <span class="role-tag tech-tag">Technician</span>
-                                                        }
-                                                        else if (isRequester)
-                                                        {
-                                                            <span class="role-tag req-tag">Requester</span>
-                                                        }
+                                                    <div class="avatar-circle" title="@c.UserName">
+                                                        @GetInitials(c.UserName)
                                                     </div>
                                                 }
-                                                <div class="comment-bubble @(isMe ? "comment-mine" : "comment-other")">
-                                                    @if (!string.IsNullOrEmpty(c.Message))
+                                                <div class="bubble-col @(isMe ? "bubble-col-mine" : "bubble-col-other")">
+                                                    @if (!isMe)
                                                     {
-                                                        <div class="comment-text">
-                                                            @if (isLong && !isExpanded)
+                                                        <div class="bubble-author">
+                                                            @c.UserName
+                                                            @if (isTech)
                                                             {
-                                                                @c.Message[..300]
-                                                                <span>... </span>
-                                                                <button class="btn-view-more" @onclick="() => ToggleExpand(c.Id)">View more</button>
+                                                                <span class="role-tag tech-tag">Technician</span>
                                                             }
-                                                            else if (isLong && isExpanded)
+                                                            else if (isRequester)
                                                             {
-                                                                @c.Message
-                                                                <button class="btn-view-more" @onclick="() => ToggleExpand(c.Id)"> View less</button>
-                                                            }
-                                                            else
-                                                            {
-                                                                @c.Message
+                                                                <span class="role-tag req-tag">Requester</span>
                                                             }
                                                         </div>
                                                     }
-                                                    @if (c.Attachments != null && c.Attachments.Count > 0)
-                                                    {
-                                                        <div class="comment-attachments">
-                                                            @foreach (var att in c.Attachments)
-                                                            {
-                                                                @if (att.IsImage)
+                                                    <div class="comment-bubble @(isMe ? "comment-mine" : "comment-other")">
+                                                        @if (!string.IsNullOrEmpty(c.Message))
+                                                        {
+                                                            <div class="comment-text">
+                                                                @if (isLong && !isExpanded)
                                                                 {
-                                                                    <img src="@(apiBase + att.Url)" class="attachment-img" alt="@att.FileName"
-                                                                         @onclick="() => OpenLightbox(apiBase + att.Url, att.FileName)" title="Click to enlarge" />
+                                                                    @c.Message[..300]
+                                                                    <span>... </span>
+                                                                    <button class="btn-view-more" @onclick="() => ToggleExpand(c.Id)">View more</button>
+                                                                }
+                                                                else if (isLong && isExpanded)
+                                                                {
+                                                                    @c.Message
+                                                                    <button class="btn-view-more" @onclick="() => ToggleExpand(c.Id)"> View less</button>
                                                                 }
                                                                 else
                                                                 {
-                                                                    <a href="@(apiBase + att.Url)" target="_blank" class="attachment-file">
-                                                                        @(att.FileName.EndsWith(".pdf") ? "📄" :
-                                                                          att.FileName.EndsWith(".doc") || att.FileName.EndsWith(".docx") ? "📝" :
-                                                                          att.FileName.EndsWith(".xls") || att.FileName.EndsWith(".xlsx") ? "📊" : "📎")
-                                                                        @att.FileName
-                                                                    </a>
+                                                                    @c.Message
                                                                 }
-                                                            }
-                                                        </div>
-                                                    }
-                                                </div>
-                                                <div class="comment-timestamp @(isMe ? "timestamp-mine" : "timestamp-other")">
-                                                    @localTime.ToString("HH:mm")
+                                                            </div>
+                                                        }
+                                                        @if (c.Attachments != null && c.Attachments.Count > 0)
+                                                        {
+                                                            <div class="comment-attachments">
+                                                                @foreach (var att in c.Attachments)
+                                                                {
+                                                                    @if (att.IsImage)
+                                                                    {
+                                                                        <img src="@(apiBase + att.Url)" class="attachment-img" alt="@att.FileName"
+                                                                             @onclick="() => OpenLightbox(apiBase + att.Url, att.FileName)" title="Click to enlarge" />
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <a href="@(apiBase + att.Url)" target="_blank" class="attachment-file">
+                                                                            @(att.FileName.EndsWith(".pdf") ? "📄" :
+                                                                              att.FileName.EndsWith(".doc") || att.FileName.EndsWith(".docx") ? "📝" :
+                                                                              att.FileName.EndsWith(".xls") || att.FileName.EndsWith(".xlsx") ? "📊" : "📎")
+                                                                            @att.FileName
+                                                                        </a>
+                                                                    }
+                                                                }
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                    <div class="comment-timestamp @(isMe ? "timestamp-mine" : "timestamp-other")">
+                                                        @localTime.ToString("HH:mm")
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
+                                        }
                                     }
 
                                     @if (ticket.Status == "Closed")
@@ -344,14 +355,41 @@
 
                     <!-- Action Buttons -->
                     <div class="meta-actions">
-                        @if (ticket.Status == "Closed")
+
+                        @* ── Approval Status Banner ── *@
+                        @if (ticket.ApprovalType != "NoApproval")
                         {
-                            <div class="closed-notice">🔒 This ticket is closed.</div>
-                            @if (AuthService.HasPermission("CanReopenTicket"))
+                            <div class="approval-banner approval-@ticket.ApprovalStatus.ToLower()">
+                                @if (ticket.ApprovalStatus == "NotRequired" && ticket.Status == "PendingApproval")
+                                {
+                                    <span>⏳ Awaiting approval</span>
+                                }
+                                else if (ticket.ApprovalStatus == "Approved")
+                                {
+                                    <span>✅ Approved</span>
+                                }
+                                else if (ticket.ApprovalStatus == "Rejected")
+                                {
+                                    <span>❌ Approval rejected — rework needed</span>
+                                }
+                                else if (ticket.ApprovalStatus == "NotApproved")
+                                {
+                                    <span>⏰ Auto-closed — no approval received</span>
+                                }
+                            </div>
+                        }
+
+                        @* ── Closed / Cancelled ── *@
+                        @if (ticket.Status == "Closed" || ticket.Status == "Cancelled")
+                        {
+                            <div class="closed-notice">
+                                @(ticket.Status == "Cancelled" ? "🚫 This request was rejected." : "🔒 This ticket is closed.")
+                            </div>
+                            @if (ticket.Status == "Closed" && AuthService.HasPermission("CanReopenTicket"))
                             {
                                 <button class="btn-meta btn-reopen-admin" @onclick="ReopenTicket">🔓 Reopen Ticket</button>
                             }
-                            else if (ticket.CreatedByUserId == AuthService.CurrentUser.Id)
+                            else if (ticket.Status == "Closed" && ticket.CreatedByUserId == AuthService.CurrentUser.Id)
                             {
                                 var closedAt = ticket.UpdatedAt ?? ticket.CreatedAt;
                                 var hoursLeft = 48 - (DateTime.Now - closedAt.ToLocalTime()).TotalHours;
@@ -367,17 +405,35 @@
                                 }
                             }
                         }
-                        else
+
+                        @* ── Pending Approval: Approve / Reject (approver only) ── *@
+                        @if (ticket.Status == "PendingApproval" && ticket.ApproverUserId == AuthService.CurrentUser.Id)
+                        {
+                            <div class="approval-actions-label">Your approval is required:</div>
+                            <button class="btn-meta btn-approve" @onclick="ApproveTicket">✅ Approve</button>
+                            <button class="btn-meta btn-reject" @onclick="OpenRejectModal">❌ Reject</button>
+                        }
+
+                        @* ── Active ticket actions ── *@
+                        @if (ticket.Status != "Closed" && ticket.Status != "Cancelled" && ticket.Status != "PendingApproval")
                         {
                             @if (AuthService.HasPermission("CanEditTicket"))
                             {
                                 <button class="btn-meta btn-edit" @onclick="OpenEditModal">✏️ Edit</button>
                             }
-                            @if (AuthService.HasPermission("CanCloseTicket"))
+                            @* Mark as Done — technician only, not for BeforeWork pending ── *@
+                            @if (AuthService.HasPermission("CanMarkTicketDone") &&
+                                 ticket.AssignedToUserId == AuthService.CurrentUser.Id &&
+                                 (ticket.Status == "InProgress" || ticket.Status == "Assigned" || ticket.Status == "Open"))
+                            {
+                                <button class="btn-meta btn-markdone" @onclick="MarkTicketDone">🏁 Mark as Done</button>
+                            }
+                            @if (AuthService.HasPermission("CanCloseTicket") && ticket.ApprovalType == "NoApproval")
                             {
                                 <button class="btn-meta btn-close-ticket" @onclick="CloseTicket">🔒 Close</button>
                             }
                         }
+
                         @if (AuthService.HasPermission("CanDeleteTicket"))
                         {
                             <button class="btn-meta btn-delete" @onclick="DeleteTicket">🗑️ Delete</button>
@@ -441,6 +497,31 @@
     <div class="toast-box toast-@toastType">@toastMessage</div>
 }
 
+@* ── Rejection Modal ─────────────────────────────── *@
+@if (showRejectModal)
+{
+    <div class="modal-backdrop" @onclick="CloseRejectModal">
+        <div class="modal-box-sm" @onclick:stopPropagation="true">
+            <div class="modal-header-sm">
+                <h5>❌ Reject Ticket</h5>
+                <button class="modal-close-sm" @onclick="CloseRejectModal">✕</button>
+            </div>
+            <div class="modal-body-sm">
+                <p style="font-size:0.875rem;color:#6b7280;margin-bottom:0.75rem">
+                    Please provide a reason. This will be posted in the conversation thread and the technician will be notified.
+                </p>
+                <textarea class="form-control" rows="4"
+                          placeholder="e.g. The issue description is incomplete. Please provide error logs and steps to reproduce."
+                          @bind="rejectReason"></textarea>
+                <div class="d-flex gap-2 justify-content-end" style="margin-top:1rem">
+                    <button class="btn btn-secondary btn-sm" @onclick="CloseRejectModal">Cancel</button>
+                    <button class="btn btn-danger btn-sm" @onclick="ConfirmReject">Confirm Rejection</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @if (lightboxUrl != null)
 {
     <div class="lightbox-backdrop" @onclick="CloseLightbox">
@@ -460,11 +541,11 @@
 }
 
 <script>
-    window.scrollToBottom = function(elementId) {
+    window.scrollToBottom = function (elementId) {
         const el = document.getElementById(elementId);
         if (el) el.scrollTop = el.scrollHeight;
     };
-    window.autoResizeTextarea = function(id) {
+    window.autoResizeTextarea = function (id) {
         const ta = document.getElementById(id);
         if (!ta) return;
         ta.style.overflowY = 'hidden';
@@ -477,24 +558,24 @@
             ta.style.height = ta.scrollHeight + 'px';
         }
     };
-    window.resetTextarea = function(id) {
+    window.resetTextarea = function (id) {
         const ta = document.getElementById(id);
         if (!ta) return;
         ta.style.height = '24px';
         ta.style.overflowY = 'hidden';
     };
     window.attachmentHelpers = {
-        openPicker: function(dotNetRef) {
+        openPicker: function (dotNetRef) {
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = '.png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt';
             input.multiple = true;
-            input.onchange = async function() {
+            input.onchange = async function () {
                 for (const file of input.files) await window.attachmentHelpers.uploadFile(file, dotNetRef);
             };
             input.click();
         },
-        uploadFile: async function(file, dotNetRef) {
+        uploadFile: async function (file, dotNetRef) {
             if (file.size > 10 * 1024 * 1024) { await dotNetRef.invokeMethodAsync('OnAttachError', 'File too large. Max 10MB.'); return; }
             const formData = new FormData();
             formData.append('file', file);
@@ -507,8 +588,8 @@
                 } else { await dotNetRef.invokeMethodAsync('OnAttachError', data.message || 'Upload failed'); }
             } catch (e) { await dotNetRef.invokeMethodAsync('OnAttachError', 'Network error'); }
         },
-        setupPaste: function(dotNetRef) {
-            document.addEventListener('paste', async function(e) {
+        setupPaste: function (dotNetRef) {
+            document.addEventListener('paste', async function (e) {
                 const ta = document.getElementById('reply-textarea');
                 if (!ta || document.activeElement !== ta) return;
                 const items = e.clipboardData?.items;
@@ -1010,6 +1091,27 @@
         color: #9ca3af;
     }
 
+
+    .system-comment {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        font-size: 0.78rem;
+        color: #374151;
+        background: #f3f4f6;
+        border: 1px solid #e5e7eb;
+        border-radius: 20px;
+        padding: 0.35rem 1rem;
+        align-self: center;
+        margin: 0.25rem 0;
+        font-weight: 500;
+    }
+
+    .system-comment-time {
+        color: #9ca3af;
+        font-weight: 400;
+    }
     /* ── REPLY BOX ── */
     .reply-box {
         padding: 0.875rem 1.25rem 1rem;
@@ -1690,6 +1792,115 @@
             transform: rotate(360deg);
         }
     }
+
+    /* ── Approval Workflow ── */
+    .approval-banner {
+        padding: 0.6rem 0.875rem;
+        border-radius: 10px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .approval-notrequired {
+        display: none;
+    }
+
+    .approval-pending, .approval-notapproved {
+        background: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fde68a;
+    }
+
+    .approval-approved {
+        background: #f0fdf4;
+        color: #15803d;
+        border: 1px solid #bbf7d0;
+    }
+
+    .approval-rejected {
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+    }
+
+    .approval-actions-label {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.4rem;
+    }
+
+    .btn-approve {
+        background: linear-gradient(135deg, #059669, #10b981);
+        color: white !important;
+        border: none;
+    }
+
+        .btn-approve:hover {
+            opacity: 0.9;
+        }
+
+    .btn-reject {
+        background: #fef2f2;
+        color: #dc2626 !important;
+        border: 1px solid #fecaca;
+    }
+
+        .btn-reject:hover {
+            background: #fee2e2;
+        }
+
+    .btn-markdone {
+        background: linear-gradient(135deg, #7c3aed, #4f46e5);
+        color: white !important;
+        border: none;
+    }
+
+        .btn-markdone:hover {
+            opacity: 0.9;
+        }
+
+    /* Reject modal */
+    .modal-box-sm {
+        background: white;
+        border-radius: 14px;
+        width: 100%;
+        max-width: 460px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+
+    .modal-header-sm {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+        .modal-header-sm h5 {
+            margin: 0;
+            font-weight: 700;
+            color: #1e1b4b;
+            font-size: 1rem;
+        }
+
+    .modal-close-sm {
+        background: none;
+        border: none;
+        font-size: 1rem;
+        cursor: pointer;
+        color: #6b7280;
+    }
+
+    .modal-body-sm {
+        padding: 1.25rem;
+    }
 </style>
 
 @code {
@@ -1699,7 +1910,8 @@
     List<CommentDto> comments = new();
     List<UserDto> technicians = new();
     string newComment = "";
-    bool isLoading = true, isSending = false, showToast = false, showEditModal = false;
+    bool isLoading = true, isSending = false, showToast = false, showEditModal = false, showRejectModal = false;
+    string rejectReason = "";
     string toastMessage = "", toastType = "";
     int selectedTechnicianId = 0;
     string activeTab = "conversation";
@@ -1915,6 +2127,40 @@
         else { var body = await response.Content.ReadAsStringAsync(); string msg = "Failed"; try { msg = System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("message").GetString() ?? msg; } catch { } ShowToast(msg, "error"); }
     }
 
+    async Task MarkTicketDone()
+    {
+        if (ticket == null) return;
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Mark this ticket as done and submit for approval (if required)?");
+        if (!confirmed) return;
+        var client = Http.CreateClient("API");
+        var response = await client.PatchAsJsonAsync($"api/ticket/{TicketId}/markdone", new { UserId = AuthService.CurrentUser.Id });
+        if (response.IsSuccessStatusCode) { ShowToast("Marked as done ✅", "success"); await LoadTicket(); StateHasChanged(); }
+        else { var body = await response.Content.ReadAsStringAsync(); ShowToast("Failed: " + body, "error"); }
+    }
+
+    async Task ApproveTicket()
+    {
+        if (ticket == null) return;
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Approve this ticket?");
+        if (!confirmed) return;
+        var client = Http.CreateClient("API");
+        var response = await client.PatchAsJsonAsync($"api/ticket/{TicketId}/approve", new { UserId = AuthService.CurrentUser.Id });
+        if (response.IsSuccessStatusCode) { ShowToast("Ticket approved ✅", "success"); await LoadTicket(); StateHasChanged(); }
+        else ShowToast("Failed to approve", "error");
+    }
+
+    void OpenRejectModal() { showRejectModal = true; rejectReason = ""; StateHasChanged(); }
+    void CloseRejectModal() { showRejectModal = false; rejectReason = ""; StateHasChanged(); }
+
+    async Task ConfirmReject()
+    {
+        if (string.IsNullOrWhiteSpace(rejectReason)) { ShowToast("Rejection reason is required", "error"); return; }
+        var client = Http.CreateClient("API");
+        var response = await client.PatchAsJsonAsync($"api/ticket/{TicketId}/reject", new { UserId = AuthService.CurrentUser.Id, Reason = rejectReason });
+        if (response.IsSuccessStatusCode) { ShowToast("Ticket rejected", "success"); CloseRejectModal(); await LoadTicket(); StateHasChanged(); }
+        else ShowToast("Failed to reject", "error");
+    }
+
     async Task DeleteTicket()
     {
         if (!AuthService.HasPermission("CanDeleteTicket")) return;
@@ -1936,7 +2182,7 @@
         _ = Task.Run(async () => { await Task.Delay(3000); showToast = false; await InvokeAsync(StateHasChanged); });
     }
 
-    string FormatStatus(string s) => s switch { "Open" => "Open", "InProgress" => "In Progress", "Closed" => "Closed", _ => s };
+    string FormatStatus(string s) => s switch { "Open" => "Open", "Assigned" => "Assigned", "InProgress" => "In Progress", "Resolved" => "Resolved", "PendingApproval" => "Pending Approval", "Closed" => "Closed", "Cancelled" => "Cancelled", _ => s };
 
     string GetInitials(string name)
     {
@@ -1955,6 +2201,10 @@
         public string Description { get; set; } = "";
         public string Status { get; set; } = "";
         public string Priority { get; set; } = "";
+        public string ApprovalStatus { get; set; } = "NotRequired";
+        public string ApprovalType { get; set; } = "NoApproval";
+        public int? ApproverUserId { get; set; }
+        public string? ApproverName { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
         public int? CreatedByUserId { get; set; }
@@ -1970,6 +2220,7 @@
         public int Id { get; set; }
         public int TicketId { get; set; }
         public string Message { get; set; } = "";
+        public bool IsSystemMessage { get; set; } = false;
         public DateTime CreatedAt { get; set; }
         public int UserId { get; set; }
         public string UserName { get; set; } = "";
